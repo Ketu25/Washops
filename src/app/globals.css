@@ -1,26 +1,47 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f6f7f9;
+  --surface: #ffffff;
+  --foreground: #14181f;
+  --muted: #5b6472;
+  --border: #e2e6ec;
+  --brand: #1f6feb;
+  --brand-strong: #1a5fcc;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
   --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-line: var(--border);
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #0d1117;
+    --surface: #161b22;
+    --foreground: #e8edf4;
+    --muted: #9aa6b6;
+    --border: #262d38;
+    --brand: #4c8dff;
+    --brand-strong: #6ba1ff;
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* The native date picker indicator is near-invisible on a dark surface. */
+@media (prefers-color-scheme: dark) {
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1) opacity(0.7);
+  }
 }
