@@ -66,6 +66,68 @@ correctly refused with an explanatory message rather than a crash.
 
 ---
 
+## Deploying to Cloudflare Workers
+
+Config is committed (`wrangler.jsonc`, `open-next.config.ts`) rather than
+auto-generated, because the generated version guesses the Worker name from
+`package.json` and a mismatch fails the upload with *"Service binding
+'WORKER_SELF_REFERENCE' references Worker '<name>' which was not found"*.
+
+**`name` in `wrangler.jsonc` must match the Worker you deploy to.** It is
+`washnexos`. Rename the Worker and you must rename it here too.
+
+### Secrets
+
+`.env.local` is never deployed. Set these on the Worker — Cloudflare dashboard
+→ Settings → Variables, or:
+
+```bash
+npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+npx wrangler secret put SESSION_SECRET
+npx wrangler secret put GOOGLE_MAPS_API_KEY
+```
+
+And these as plain variables:
+
+| Variable | Value |
+| --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | your project URL |
+| `APP_TIMEZONE` | e.g. `America/New_York` |
+| `ADDRESS_COUNTRY_CODES` | `us` |
+| `GEOCODER_USER_AGENT` | only used by the Nominatim fallback |
+
+Without them the app throws on first request — `env.ts` fails loudly rather
+than handing `undefined` to the Supabase client.
+
+Note `APP_TIMEZONE` has **no** `NEXT_PUBLIC_` prefix. Next inlines prefixed
+values at build time, so on a hosted build the timezone would freeze into the
+bundle — and if unset during the build, silently fall back to the server's
+zone, which is UTC on Workers. That would make same-day bookings vanish after
+7pm Eastern.
+
+### bcrypt and the CPU limit
+
+Password hashing is deliberately slow, and `bcryptjs` is pure JavaScript, so a
+cost-12 hash burns a few hundred milliseconds of **CPU** — not wall time.
+
+- **Free plan (10ms CPU/request): sign-in and registration will fail.** No
+  configuration fixes this; the work genuinely exceeds the ceiling.
+- **Paid plan:** works. `limits.cpu_ms` in `wrangler.jsonc` raises the ceiling.
+
+If you need the free plan, the options are lowering `BCRYPT_ROUNDS` in
+`src/lib/auth.ts` (weaker hashes, roughly 4x faster per step down), or moving
+auth to a platform without a hard CPU cap. Both are real trade-offs, not
+tuning.
+
+### Commands
+
+```bash
+npm run preview   # build the Worker and run it locally in workerd
+npm run deploy    # build and deploy
+```
+
+---
+
 ## What's in it
 
 **Public** — `/` explains the service and hosts a coverage checker that needs no

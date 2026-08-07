@@ -5,7 +5,16 @@
  * anyone west of Greenwich after 7pm — so all of it routes through an
  * explicit IANA timezone.
  */
+/**
+ * Read without a NEXT_PUBLIC_ prefix so it resolves at RUNTIME. Next inlines
+ * NEXT_PUBLIC_ values at build time, which on a hosted build means the value
+ * is frozen into the bundle — and if it was not set during the build, this
+ * silently falls back to the server's timezone, which is UTC on Cloudflare
+ * Workers. That would make same-day bookings unbookable after 7pm Eastern.
+ * Nothing client-side imports this module, so the prefix bought nothing.
+ */
 export const APP_TIMEZONE =
+  process.env.APP_TIMEZONE?.trim() ||
   process.env.NEXT_PUBLIC_APP_TIMEZONE?.trim() ||
   Intl.DateTimeFormat().resolvedOptions().timeZone ||
   "UTC";

@@ -1,10 +1,36 @@
 import "server-only";
 
+import { createRequire } from "node:module";
+
 import type { WebSocketLikeConstructor } from "@supabase/realtime-js";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import ws from "ws";
 
 import { env } from "./env";
+
+/**
+ * supabase-js builds a realtime client eagerly and needs a WebSocket
+ * constructor to exist at construction time, even though this app never
+ * subscribes to anything.
+ *
+ * Cloudflare Workers and Node 22+ expose WebSocket globally, so nothing extra
+ * is needed there. Node 20 does not, so the `ws` package fills the gap.
+ *
+ * It is loaded through createRequire rather than a static import on purpose:
+ * bundlers do not statically analyse a createRequire call, so `ws` never gets
+ * pulled into the Worker bundle. That matters because `ws` depends on
+ * node:tls, which workerd does not implement — a static import would break the
+ * Cloudflare build even though the code path never runs there.
+ */
+function webSocketTransport(): WebSocketLikeConstructor | undefined {
+  if (typeof globalThis.WebSocket !== "undefined") return undefined;
+  try {
+    return createRequire(import.meta.url)("ws") as WebSocketLikeConstructor;
+  } catch {
+    // No global WebSocket and no `ws` installed. Let supabase-js raise its own
+    // error rather than masking the cause here.
+    return undefined;
+  }
+}
 
 let cached: SupabaseClient | null = null;
 
@@ -19,17 +45,10 @@ let cached: SupabaseClient | null = null;
  */
 export function db(): SupabaseClient {
   if (!cached) {
+    const transport = webSocketTransport();
     cached = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
-      // supabase-js builds a realtime client eagerly, and that needs a
-      // WebSocket constructor which Node 20 does not expose globally (it
-      // arrived in Node 22). We never subscribe to realtime, but the client
-      // still has to construct, so hand it a transport explicitly.
-      //
-      // The cast is needed because `ws`'s constructor overloads are wider
-      // than the interface supabase declares; the two are compatible at
-      // runtime, which is all this is used for.
-      realtime: { transport: ws as unknown as WebSocketLikeConstructor },
+      ...(transport ? { realtime: { transport } } : {}),
     });
   }
   return cached;
