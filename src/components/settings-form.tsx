@@ -4,9 +4,11 @@ import { useActionState, useState } from "react";
 
 import type { FormState } from "@/app/actions/auth";
 import { updateSettingsAction } from "@/app/actions/settings";
+import { Alert } from "@/components/ui/alert";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { AddressAutocomplete } from "./address-autocomplete";
-import { SubmitButton } from "./submit-button";
-import { Alert, Field, Input } from "./ui";
 
 const initialState: FormState = {};
 
@@ -27,7 +29,7 @@ export function SettingsForm({ defaults }: { defaults: SettingsDefaults }) {
       {state.error ? <Alert tone="error">{state.error}</Alert> : null}
       {state.success ? <Alert tone="success">{state.success}</Alert> : null}
 
-      <Field label="Laundromat name" htmlFor="name" error={errors.name}>
+      <Field label="Laundromat name" htmlFor="name" error={errors.name} required>
         <Input
           id="name"
           name="name"
@@ -43,6 +45,7 @@ export function SettingsForm({ defaults }: { defaults: SettingsDefaults }) {
         htmlFor="address"
         error={errors.address}
         hint="Start typing and pick it from the list. We geocode this to anchor your service area."
+        required
       >
         <AddressAutocomplete
           id="address"
@@ -59,27 +62,33 @@ export function SettingsForm({ defaults }: { defaults: SettingsDefaults }) {
       </Field>
 
       <Field
-        label="Service radius (miles)"
+        label="Service radius"
         htmlFor="serviceRadiusMiles"
         error={errors.serviceRadiusMiles}
         hint="Straight-line distance. Customers beyond this cannot register or book."
+        required
       >
-        <Input
-          id="serviceRadiusMiles"
-          name="serviceRadiusMiles"
-          type="number"
-          inputMode="decimal"
-          step="0.1"
-          min="0.1"
-          max="500"
-          required
-          defaultValue={values.serviceRadiusMiles}
-          invalid={Boolean(errors.serviceRadiusMiles)}
-          className="max-w-40"
-        />
+        <div className="relative max-w-40">
+          <Input
+            id="serviceRadiusMiles"
+            name="serviceRadiusMiles"
+            type="number"
+            inputMode="decimal"
+            step="0.1"
+            min="0.1"
+            max="500"
+            required
+            defaultValue={values.serviceRadiusMiles}
+            invalid={Boolean(errors.serviceRadiusMiles)}
+            className="pr-14"
+          />
+          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-fg-subtle">
+            miles
+          </span>
+        </div>
       </Field>
 
-      <SubmitButton pendingLabel="Verifying address…" className="sm:self-start">
+      <SubmitButton className="mt-1 sm:self-start" pendingLabel="Verifying address…">
         Save settings
       </SubmitButton>
     </form>

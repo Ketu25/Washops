@@ -1,12 +1,15 @@
 "use client";
 
+import { MapPin } from "lucide-react";
 import Link from "next/link";
 import { useActionState, useState } from "react";
 
 import { checkCoverageAction, type CoverageState } from "@/app/actions/coverage";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/field";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { AddressAutocomplete } from "./address-autocomplete";
-import { SubmitButton } from "./submit-button";
-import { Alert, Field } from "./ui";
 
 const initialState: CoverageState = { status: "idle" };
 
@@ -36,7 +39,8 @@ export function CoverageChecker({ configured }: { configured: boolean }) {
           />
         </Field>
 
-        <SubmitButton pendingLabel="Checking…" className="sm:self-start">
+        <SubmitButton size="lg" pendingLabel="Checking…">
+          <MapPin aria-hidden />
           Check my address
         </SubmitButton>
       </form>
@@ -52,12 +56,9 @@ export function CoverageChecker({ configured }: { configured: boolean }) {
       {state.status === "covered" ? (
         <Alert tone="success" title="You are in our service area">
           <p>{state.message}</p>
-          <p className="mt-2">
-            <Link href="/register" className="font-medium underline underline-offset-4">
-              Create an account
-            </Link>{" "}
-            to schedule your first pickup.
-          </p>
+          <Button asChild size="sm" className="mt-3">
+            <Link href="/register">Create an account</Link>
+          </Button>
         </Alert>
       ) : null}
 

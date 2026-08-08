@@ -1,18 +1,26 @@
+import {
+  CalendarDays,
+  ClipboardList,
+  Clock3,
+  Inbox,
+  Settings2,
+  Truck,
+} from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 
+import { Container } from "@/components/layout/container";
+import { PageHeader } from "@/components/layout/page-header";
+import { SiteHeader } from "@/components/layout/site-header";
+import { EmptyState } from "@/components/patterns/empty-state";
+import { StatCard } from "@/components/patterns/stat-card";
+import { StatusBadge, TypeBadge } from "@/components/patterns/request-badges";
 import { RequestFilters } from "@/components/request-filters";
 import { RequestStatusActions } from "@/components/request-status-actions";
-import { SiteHeader } from "@/components/site-header";
-import {
-  Alert,
-  Card,
-  EmptyState,
-  PageHeading,
-  Stat,
-  StatusBadge,
-  TypeBadge,
-} from "@/components/ui";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { requireAdmin } from "@/lib/auth";
 import { formatDate, formatDateTime, todayISO } from "@/lib/dates";
 import { formatMiles } from "@/lib/geo";
@@ -21,7 +29,6 @@ import { getSettings } from "@/lib/settings";
 import type { RequestStatus, RequestType } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
-
 export const metadata = { title: "Admin · Laundry Portal" };
 
 const STATUSES: RequestStatus[] = ["pending", "planned", "completed", "cancelled"];
@@ -32,11 +39,9 @@ function parseStatus(value?: string): RequestStatus | "all" {
     ? (value as RequestStatus)
     : "all";
 }
-
 function parseType(value?: string): RequestType | "all" {
   return TYPES.includes(value as RequestType) ? (value as RequestType) : "all";
 }
-
 function parseDate(value?: string): string | undefined {
   return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
 }
@@ -63,153 +68,182 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
   return (
     <>
       <SiteHeader />
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-10 sm:px-6">
-        <PageHeading
-          title="Requests"
-          description={
-            settings
-              ? `${settings.name} · serving ${formatMiles(
-                  settings.service_radius_miles,
-                )} miles from ${settings.address}`
-              : "Configure your laundromat location to start accepting requests."
-          }
-          actions={
-            <Link
-              href="/admin/settings"
-              className="rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium transition hover:bg-background"
-            >
-              Settings
-            </Link>
-          }
-        />
+      <main className="flex-1 py-8">
+        <Container size="full">
+          <PageHeader
+            title="Requests"
+            description={
+              settings
+                ? `${settings.name} · serving ${formatMiles(
+                    settings.service_radius_miles,
+                  )} miles from ${settings.address}`
+                : "Configure your laundromat location to start accepting requests."
+            }
+            actions={
+              <Button asChild variant="secondary">
+                <Link href="/admin/settings">
+                  <Settings2 aria-hidden />
+                  Settings
+                </Link>
+              </Button>
+            }
+          />
 
-        {!settings ? (
-          <div className="mb-6">
-            <Alert tone="warning" title="Service area not configured">
-              Customers cannot register or schedule until you set the
-              laundromat address and service radius.{" "}
-              <Link href="/admin/settings" className="font-medium underline underline-offset-4">
-                Configure it now
-              </Link>
-              .
-            </Alert>
+          {!settings ? (
+            <div className="mb-6">
+              <Alert tone="warning" title="Service area not configured">
+                Customers cannot register or schedule until you set the
+                laundromat address and service radius.{" "}
+                <Link href="/admin/settings">Configure it now</Link>.
+              </Alert>
+            </div>
+          ) : null}
+
+          <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard
+              label="Pending"
+              value={stats.pending}
+              hint="Awaiting confirmation"
+              icon={Clock3}
+              tone="warning"
+            />
+            <StatCard
+              label="Planned"
+              value={stats.planned}
+              hint="On the route"
+              icon={Truck}
+              tone="brand"
+            />
+            <StatCard
+              label="Today"
+              value={stats.today}
+              hint={`${stats.todayPickups} pickup${
+                stats.todayPickups === 1 ? "" : "s"
+              } · ${stats.todayDropoffs} drop-off${
+                stats.todayDropoffs === 1 ? "" : "s"
+              }`}
+              icon={CalendarDays}
+            />
+            <StatCard
+              label="Upcoming"
+              value={stats.upcomingWeek}
+              hint="Open requests today or later"
+              icon={ClipboardList}
+            />
           </div>
-        ) : null}
 
-        <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat label="Pending" value={stats.pending} hint="Awaiting confirmation" />
-          <Stat label="Planned" value={stats.planned} hint="On the route" />
-          <Stat
-            label="Today"
-            value={stats.today}
-            hint={`${stats.todayPickups} pickup${
-              stats.todayPickups === 1 ? "" : "s"
-            } · ${stats.todayDropoffs} drop-off${
-              stats.todayDropoffs === 1 ? "" : "s"
-            }`}
-          />
-          <Stat
-            label="Upcoming"
-            value={stats.upcomingWeek}
-            hint="Open requests today or later"
-          />
-        </div>
-
-        <Card className="mb-6">
-          <Suspense fallback={<div className="h-20" />}>
-            <RequestFilters today={today} />
-          </Suspense>
-        </Card>
-
-        {requests.length === 0 ? (
-          <EmptyState title="No requests match these filters">
-            Try clearing the date or status filter.
-          </EmptyState>
-        ) : (
-          <Card className="overflow-x-auto p-0">
-            <table className="w-full min-w-[64rem] text-sm">
-              <thead className="border-b border-line text-left text-xs uppercase tracking-wide text-muted">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Scheduled</th>
-                  <th className="px-4 py-3 font-medium">Type</th>
-                  <th className="px-4 py-3 font-medium">Customer</th>
-                  <th className="px-4 py-3 font-medium">Address</th>
-                  <th className="px-4 py-3 font-medium">Distance</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {requests.map((request) => (
-                  <tr key={request.id} className="border-b border-line align-top last:border-0">
-                    <td className="px-4 py-4">
-                      <p className="font-medium">{formatDate(request.scheduled_date)}</p>
-                      <p className="text-xs text-muted">{request.time_window}</p>
-                      <p className="mt-1 text-xs text-muted">
-                        Requested {formatDateTime(request.created_at)}
-                      </p>
-                    </td>
-                    <td className="px-4 py-4">
-                      <TypeBadge type={request.type} />
-                    </td>
-                    <td className="px-4 py-4">
-                      <p className="font-medium">
-                        {request.users?.full_name ?? "Deleted customer"}
-                      </p>
-                      <p className="text-xs text-muted">{request.users?.email}</p>
-                      {request.users?.phone ? (
-                        <p className="text-xs text-muted">{request.users.phone}</p>
-                      ) : null}
-                    </td>
-                    <td className="max-w-xs px-4 py-4">
-                      <p>{request.address_line1}</p>
-                      {request.address_line2 ? (
-                        <p className="text-xs text-muted">{request.address_line2}</p>
-                      ) : null}
-                      <p className="text-xs text-muted">
-                        {[request.city, request.state, request.postal_code]
-                          .filter(Boolean)
-                          .join(", ")}
-                      </p>
-                      {request.notes ? (
-                        <p className="mt-1.5 text-xs italic text-muted">
-                          “{request.notes}”
-                        </p>
-                      ) : null}
-                    </td>
-                    <td className="px-4 py-4 tabular-nums text-muted">
-                      {formatMiles(request.distance_miles)} mi
-                    </td>
-                    <td className="px-4 py-4">
-                      <StatusBadge status={request.status} />
-                      {request.planned_at ? (
-                        <p className="mt-1 text-xs text-muted">
-                          Planned {formatDateTime(request.planned_at)}
-                        </p>
-                      ) : null}
-                      {request.completed_at ? (
-                        <p className="mt-1 text-xs text-muted">
-                          Completed {formatDateTime(request.completed_at)}
-                        </p>
-                      ) : null}
-                    </td>
-                    <td className="px-4 py-4">
-                      <RequestStatusActions
-                        requestId={request.id}
-                        status={request.status}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <Card className="mb-4 p-4">
+            <Suspense fallback={<div className="h-16" />}>
+              <RequestFilters today={today} />
+            </Suspense>
           </Card>
-        )}
 
-        <p className="mt-4 text-xs text-muted">
-          Showing {requests.length} request{requests.length === 1 ? "" : "s"}
-          {requests.length === 500 ? " (capped at 500 — narrow the filters)" : ""}.
-        </p>
+          {requests.length === 0 ? (
+            <EmptyState
+              icon={Inbox}
+              title="No requests match these filters"
+              description="Try clearing the date or status filter."
+            />
+          ) : (
+            <TableWrap>
+              <Table className="min-w-[60rem]">
+                <THead>
+                  <TR className="hover:bg-transparent">
+                    <TH className="w-44">Scheduled</TH>
+                    <TH className="w-28">Type</TH>
+                    <TH className="w-56">Customer</TH>
+                    <TH>Address</TH>
+                    <TH className="w-20 text-right">Distance</TH>
+                    <TH className="w-40">Status</TH>
+                    <TH className="w-52">Actions</TH>
+                  </TR>
+                </THead>
+                <TBody>
+                  {requests.map((request) => (
+                    <TR key={request.id}>
+                      <TD>
+                        <p className="font-medium whitespace-nowrap">
+                          {formatDate(request.scheduled_date)}
+                        </p>
+                        <p className="mt-0.5 whitespace-nowrap text-xs text-fg-muted">
+                          {request.time_window}
+                        </p>
+                        <p className="mt-1 whitespace-nowrap text-xs text-fg-subtle">
+                          Requested {formatDateTime(request.created_at)}
+                        </p>
+                      </TD>
+
+                      <TD>
+                        <TypeBadge type={request.type} />
+                      </TD>
+
+                      <TD>
+                        <p className="font-medium">
+                          {request.users?.full_name ?? "Deleted customer"}
+                        </p>
+                        <p className="truncate text-xs text-fg-muted">
+                          {request.users?.email}
+                        </p>
+                        {request.users?.phone ? (
+                          <p className="text-xs text-fg-muted">{request.users.phone}</p>
+                        ) : null}
+                      </TD>
+
+                      {/* The old table let a long street name wrap mid-address
+                          into three ragged lines. A fixed minimum plus
+                          balanced wrapping keeps it to two tidy ones. */}
+                      <TD className="min-w-56">
+                        <p className="text-pretty">{request.address_line1}</p>
+                        {request.address_line2 ? (
+                          <p className="text-xs text-fg-muted">{request.address_line2}</p>
+                        ) : null}
+                        <p className="text-xs text-fg-muted">
+                          {[request.city, request.state, request.postal_code]
+                            .filter(Boolean)
+                            .join(", ")}
+                        </p>
+                        {request.notes ? (
+                          <p className="mt-1.5 border-l-2 border-line pl-2 text-xs italic text-fg-subtle">
+                            {request.notes}
+                          </p>
+                        ) : null}
+                      </TD>
+
+                      <TD className="text-right tabular-nums whitespace-nowrap text-fg-muted">
+                        {formatMiles(request.distance_miles)} mi
+                      </TD>
+
+                      <TD>
+                        <StatusBadge status={request.status} />
+                        {request.completed_at ? (
+                          <p className="mt-1.5 whitespace-nowrap text-xs text-fg-subtle">
+                            {formatDateTime(request.completed_at)}
+                          </p>
+                        ) : request.planned_at ? (
+                          <p className="mt-1.5 whitespace-nowrap text-xs text-fg-subtle">
+                            {formatDateTime(request.planned_at)}
+                          </p>
+                        ) : null}
+                      </TD>
+
+                      <TD>
+                        <RequestStatusActions
+                          requestId={request.id}
+                          status={request.status}
+                        />
+                      </TD>
+                    </TR>
+                  ))}
+                </TBody>
+              </Table>
+            </TableWrap>
+          )}
+
+          <p className="mt-3 text-xs text-fg-subtle">
+            Showing {requests.length} request{requests.length === 1 ? "" : "s"}
+            {requests.length === 500 ? " (capped at 500 — narrow the filters)" : ""}.
+          </p>
+        </Container>
       </main>
     </>
   );

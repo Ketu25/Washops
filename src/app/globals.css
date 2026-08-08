@@ -1,47 +1,270 @@
 @import "tailwindcss";
+/* Enter/exit keyframes for the Radix-driven overlays (dialog, menus). */
+@import "tw-animate-css";
+
+/* ---------------------------------------------------------------------
+   Design tokens
+   ---------------------------------------------------------------------
+   Two layers, deliberately:
+
+   1. A raw ramp (--slate-*, --brand-*) that names colours by what they
+      ARE. Nothing in the app references these directly.
+   2. Semantic tokens (--color-surface, --color-danger) that name colours
+      by what they are FOR. Components only ever use these.
+
+   That indirection is what makes dark mode a 20-line override instead of
+   an audit of every component, and what lets the palette change without
+   touching a single component file.
+
+   Colours are OKLCH so that steps in the ramp are perceptually even —
+   with HSL, a "500" in one hue reads much darker than in another, which
+   is why hand-picked palettes drift.
+--------------------------------------------------------------------- */
+
+@theme {
+  /* Neutral ramp — very slightly cool, so it sits with the brand hue */
+  --color-slate-50: oklch(0.985 0.002 250);
+  --color-slate-100: oklch(0.968 0.004 250);
+  --color-slate-200: oklch(0.924 0.006 250);
+  --color-slate-300: oklch(0.868 0.008 250);
+  --color-slate-400: oklch(0.706 0.012 250);
+  --color-slate-500: oklch(0.565 0.014 250);
+  --color-slate-600: oklch(0.455 0.014 250);
+  --color-slate-700: oklch(0.375 0.013 250);
+  --color-slate-800: oklch(0.272 0.012 250);
+  --color-slate-900: oklch(0.208 0.011 250);
+  --color-slate-950: oklch(0.145 0.010 250);
+
+  /* Brand — a deep marine teal. Cool and clean without being the default
+     SaaS blue, and it keeps enough chroma at 600 to carry a solid button. */
+  --color-brand-50: oklch(0.975 0.014 210);
+  --color-brand-100: oklch(0.945 0.030 210);
+  --color-brand-200: oklch(0.895 0.058 208);
+  --color-brand-300: oklch(0.825 0.088 206);
+  --color-brand-400: oklch(0.735 0.108 204);
+  --color-brand-500: oklch(0.650 0.115 202);
+  --color-brand-600: oklch(0.560 0.108 202);
+  --color-brand-700: oklch(0.470 0.092 203);
+  --color-brand-800: oklch(0.390 0.074 204);
+  --color-brand-900: oklch(0.320 0.058 205);
+
+  /* Accent — warm amber, used sparingly for "needs attention" */
+  --color-amber-100: oklch(0.955 0.045 85);
+  --color-amber-500: oklch(0.760 0.150 70);
+  --color-amber-700: oklch(0.560 0.130 60);
+  --color-amber-950: oklch(0.250 0.055 65);
+
+  --color-emerald-100: oklch(0.950 0.040 165);
+  --color-emerald-500: oklch(0.700 0.140 165);
+  --color-emerald-700: oklch(0.520 0.115 165);
+  --color-emerald-950: oklch(0.240 0.045 165);
+
+  --color-rose-100: oklch(0.950 0.030 20);
+  --color-rose-500: oklch(0.640 0.190 22);
+  --color-rose-700: oklch(0.505 0.170 22);
+  --color-rose-950: oklch(0.245 0.060 20);
+
+  /* Type scale — a 1.2 ratio, capped. Larger jumps at display sizes so
+     headings have real presence without inventing sizes per page. */
+  --text-2xs: 0.6875rem;
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.9375rem;
+  --text-lg: 1.0625rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+  --text-4xl: 2.375rem;
+  --text-5xl: 3rem;
+  --text-6xl: 3.75rem;
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+/* ---------------------------------------------------------------------
+   Semantic layer — light
+--------------------------------------------------------------------- */
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-fg-on-brand: var(--fg-on-brand);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-fg: var(--brand-fg);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-fg: var(--success-fg);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-fg: var(--warning-fg);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-fg: var(--danger-fg);
+  --color-ring: var(--ring);
+}
 
 :root {
-  --background: #f6f7f9;
+  --canvas: var(--color-slate-50);
   --surface: #ffffff;
-  --foreground: #14181f;
-  --muted: #5b6472;
-  --border: #e2e6ec;
-  --brand: #1f6feb;
-  --brand-strong: #1a5fcc;
+  --surface-raised: #ffffff;
+  --surface-sunken: var(--color-slate-100);
+
+  --fg: var(--color-slate-900);
+  --fg-muted: var(--color-slate-600);
+  --fg-subtle: var(--color-slate-500);
+  --fg-on-brand: #ffffff;
+
+  --line: var(--color-slate-200);
+  --line-strong: var(--color-slate-300);
+
+  --brand: var(--color-brand-600);
+  --brand-hover: var(--color-brand-700);
+  --brand-soft: var(--color-brand-50);
+  --brand-fg: var(--color-brand-700);
+
+  --success: var(--color-emerald-500);
+  --success-soft: var(--color-emerald-100);
+  --success-fg: var(--color-emerald-700);
+
+  --warning: var(--color-amber-500);
+  --warning-soft: var(--color-amber-100);
+  --warning-fg: var(--color-amber-700);
+
+  --danger: var(--color-rose-500);
+  --danger-soft: var(--color-rose-100);
+  --danger-fg: var(--color-rose-700);
+
+  --ring: var(--color-brand-500);
+
+  /* Depth is carried by layered, low-opacity shadows rather than one
+     heavy blur — that is what separates "raised" from "smudged". */
+  --shadow-xs: 0 1px 2px 0 oklch(0.145 0.01 250 / 0.05);
+  --shadow-sm:
+    0 1px 2px 0 oklch(0.145 0.01 250 / 0.06),
+    0 1px 3px 0 oklch(0.145 0.01 250 / 0.04);
+  --shadow-md:
+    0 2px 4px -1px oklch(0.145 0.01 250 / 0.06),
+    0 4px 12px -2px oklch(0.145 0.01 250 / 0.08);
+  --shadow-lg:
+    0 4px 8px -2px oklch(0.145 0.01 250 / 0.08),
+    0 12px 28px -4px oklch(0.145 0.01 250 / 0.10);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-surface: var(--surface);
-  --color-foreground: var(--foreground);
-  --color-muted: var(--muted);
-  --color-line: var(--border);
-  --color-brand: var(--brand);
-  --color-brand-strong: var(--brand-strong);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
+/* ---------------------------------------------------------------------
+   Semantic layer — dark. Only the mapping changes; no component knows.
+--------------------------------------------------------------------- */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0d1117;
-    --surface: #161b22;
-    --foreground: #e8edf4;
-    --muted: #9aa6b6;
-    --border: #262d38;
-    --brand: #4c8dff;
-    --brand-strong: #6ba1ff;
+    --canvas: var(--color-slate-950);
+    --surface: var(--color-slate-900);
+    --surface-raised: var(--color-slate-800);
+    --surface-sunken: oklch(0.175 0.010 250);
+
+    --fg: var(--color-slate-100);
+    --fg-muted: var(--color-slate-400);
+    --fg-subtle: var(--color-slate-500);
+
+    --line: oklch(0.30 0.012 250);
+    --line-strong: oklch(0.38 0.012 250);
+
+    /* Lift the brand in dark mode — a 600 on near-black loses contrast */
+    --brand: var(--color-brand-500);
+    --brand-hover: var(--color-brand-400);
+    --brand-soft: oklch(0.30 0.045 205);
+    --brand-fg: var(--color-brand-300);
+
+    --success-soft: var(--color-emerald-950);
+    --success-fg: oklch(0.80 0.110 165);
+    --warning-soft: var(--color-amber-950);
+    --warning-fg: oklch(0.83 0.115 80);
+    --danger-soft: var(--color-rose-950);
+    --danger-fg: oklch(0.78 0.130 20);
+
+    --shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 0.3);
+    --shadow-sm: 0 1px 3px 0 oklch(0 0 0 / 0.4);
+    --shadow-md: 0 4px 12px -2px oklch(0 0 0 / 0.5);
+    --shadow-lg: 0 12px 28px -4px oklch(0 0 0 / 0.6);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
+/* --------------------------------------------------------------------- */
+
+* {
+  border-color: var(--line);
 }
 
-/* The native date picker indicator is near-invisible on a dark surface. */
+body {
+  background: var(--canvas);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Headings track tighter as they get larger, which is what keeps display
+   type from looking loose and amateurish. */
+h1,
+h2,
+h3 {
+  letter-spacing: -0.02em;
+}
+
+.text-4xl,
+.text-5xl,
+.text-6xl {
+  letter-spacing: -0.03em;
+}
+
+/* One focus treatment everywhere, keyboard-only. */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Native controls we keep on purpose (see components/ui/select.tsx) still
+   need their built-in chrome neutralised. */
+select {
+  appearance: none;
+  background-image: none;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.55;
+}
+
+input[type="date"]:hover::-webkit-calendar-picker-indicator {
+  opacity: 1;
+}
+
 @media (prefers-color-scheme: dark) {
   input[type="date"]::-webkit-calendar-picker-indicator {
-    filter: invert(1) opacity(0.7);
+    filter: invert(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
   }
 }

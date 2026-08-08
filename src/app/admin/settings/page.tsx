@@ -1,6 +1,11 @@
+import { MapPin, TriangleAlert } from "lucide-react";
+
+import { Container } from "@/components/layout/container";
+import { PageHeader } from "@/components/layout/page-header";
+import { SiteHeader } from "@/components/layout/site-header";
 import { SettingsForm } from "@/components/settings-form";
-import { SiteHeader } from "@/components/site-header";
-import { Alert, Card, PageHeading } from "@/components/ui";
+import { Alert } from "@/components/ui/alert";
+import { Card } from "@/components/ui/card";
 import { requireAdmin } from "@/lib/auth";
 import { formatDateTime } from "@/lib/dates";
 import { formatMiles } from "@/lib/geo";
@@ -8,7 +13,6 @@ import { getSettings } from "@/lib/settings";
 import { db } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
-
 export const metadata = { title: "Settings · Laundry Portal" };
 
 export default async function AdminSettingsPage() {
@@ -37,78 +41,92 @@ export default async function AdminSettingsPage() {
   return (
     <>
       <SiteHeader />
-      <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-10 sm:px-6">
-        <PageHeading
-          title="Laundromat settings"
-          description="Your location and service radius drive every coverage check in the portal."
-        />
-
-        {!settings ? (
-          <div className="mb-6">
-            <Alert tone="warning" title="Not configured yet">
-              Until you save these settings, customers cannot register, check
-              coverage, or schedule anything.
-            </Alert>
-          </div>
-        ) : null}
-
-        <Card>
-          <SettingsForm
-            defaults={{
-              name: settings?.name ?? "",
-              address: settings?.address ?? "",
-              serviceRadiusMiles: settings
-                ? String(settings.service_radius_miles)
-                : "5",
-            }}
+      <main className="flex-1 py-8">
+        <Container size="md">
+          <PageHeader
+            title="Laundromat settings"
+            description="Your location and service radius drive every coverage check in the portal."
           />
-        </Card>
 
-        {settings ? (
-          <Card className="mt-6">
-            <h2 className="text-sm font-semibold">Current coverage anchor</h2>
-            <dl className="mt-3 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[10rem_1fr]">
-              <dt className="text-muted">Geocoded to</dt>
-              <dd>{settings.formatted_address ?? settings.address}</dd>
-              <dt className="text-muted">Coordinates</dt>
-              <dd className="font-mono text-xs">
-                {settings.latitude.toFixed(6)}, {settings.longitude.toFixed(6)}
-              </dd>
-              <dt className="text-muted">Radius</dt>
-              <dd>{formatMiles(settings.service_radius_miles)} miles</dd>
-              <dt className="text-muted">Last updated</dt>
-              <dd>{formatDateTime(settings.updated_at)}</dd>
-            </dl>
-          </Card>
-        ) : null}
+          {!settings ? (
+            <div className="mb-6">
+              <Alert tone="warning" title="Not configured yet">
+                Until you save these settings, customers cannot register, check
+                coverage, or schedule anything.
+              </Alert>
+            </div>
+          ) : null}
 
-        {outOfRange.length > 0 ? (
-          <Card className="mt-6">
-            <h2 className="text-sm font-semibold">
-              Customers outside the current radius ({outOfRange.length})
-            </h2>
-            <p className="mb-3 mt-1 text-xs text-muted">
-              These accounts already exist but can no longer book. Their
-              in-flight requests are untouched.
-            </p>
-            <ul className="flex flex-col gap-1.5 text-sm">
-              {outOfRange.map((customer) => (
-                <li
-                  key={customer.email}
-                  className="flex items-center justify-between gap-4 border-b border-line pb-1.5 last:border-0"
-                >
-                  <span>
-                    {customer.full_name}{" "}
-                    <span className="text-muted">· {customer.email}</span>
-                  </span>
-                  <span className="shrink-0 tabular-nums text-muted">
-                    {formatMiles(customer.distance)} mi
-                  </span>
-                </li>
-              ))}
-            </ul>
+          <Card className="p-6">
+            <SettingsForm
+              defaults={{
+                name: settings?.name ?? "",
+                address: settings?.address ?? "",
+                serviceRadiusMiles: settings
+                  ? String(settings.service_radius_miles)
+                  : "5",
+              }}
+            />
           </Card>
-        ) : null}
+
+          {settings ? (
+            <Card className="mt-5 p-5">
+              <h2 className="flex items-center gap-1.5 text-sm font-semibold text-fg">
+                <MapPin aria-hidden className="size-3.5 text-brand" />
+                Current coverage anchor
+              </h2>
+              <dl className="mt-3 grid gap-x-6 gap-y-2.5 text-sm sm:grid-cols-[9rem_1fr]">
+                <dt className="text-fg-muted">Geocoded to</dt>
+                <dd className="text-fg">
+                  {settings.formatted_address ?? settings.address}
+                </dd>
+                <dt className="text-fg-muted">Coordinates</dt>
+                <dd className="font-mono text-xs text-fg">
+                  {settings.latitude.toFixed(6)}, {settings.longitude.toFixed(6)}
+                </dd>
+                <dt className="text-fg-muted">Radius</dt>
+                <dd className="text-fg">
+                  {formatMiles(settings.service_radius_miles)} miles
+                </dd>
+                <dt className="text-fg-muted">Last updated</dt>
+                <dd className="text-fg">{formatDateTime(settings.updated_at)}</dd>
+              </dl>
+            </Card>
+          ) : null}
+
+          {outOfRange.length > 0 ? (
+            <Card className="mt-5 p-5">
+              <h2 className="flex items-center gap-1.5 text-sm font-semibold text-fg">
+                <TriangleAlert aria-hidden className="size-3.5 text-warning" />
+                Customers outside the current radius ({outOfRange.length})
+              </h2>
+              <p className="mb-3 mt-1 text-xs text-fg-subtle">
+                These accounts already exist but can no longer book. Their
+                in-flight requests are untouched.
+              </p>
+              <ul className="divide-y divide-line text-sm">
+                {outOfRange.map((customer) => (
+                  <li
+                    key={customer.email}
+                    className="flex items-center justify-between gap-4 py-2"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-fg">
+                        {customer.full_name}
+                      </span>
+                      <span className="block truncate text-xs text-fg-muted">
+                        {customer.email}
+                      </span>
+                    </span>
+                    <span className="shrink-0 tabular-nums text-fg-muted">
+                      {formatMiles(customer.distance)} mi
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          ) : null}
+        </Container>
       </main>
     </>
   );

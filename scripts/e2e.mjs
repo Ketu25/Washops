@@ -236,7 +236,8 @@ try {
   );
 
   await custPage.goto(`${BASE}/dashboard/schedule`);
-  await custPage.selectOption("#type", "pickup");
+  // Request type is a pair of radio cards; click the card, not a <select>.
+  await custPage.click('label:has(#type-pickup)');
   await custPage.selectOption("#timeWindow", "10:00 - 12:00");
   await clickButton(custPage, "Submit request");
   await custPage.waitForSelector("text=Request submitted", { timeout: 30000 });
@@ -257,7 +258,11 @@ try {
 
   // -------------------------------------------------------------------
   section("Admin moves the request through its lifecycle");
-  await adminPage.goto(`${BASE}/admin`);
+  // Scope the queue to this run's customer. Without it, clicking the first
+  // "Mark planned" in the table acts on whatever row happens to be first —
+  // which, on a database with real requests in it, is someone else's.
+  const mine = `${BASE}/admin?q=${encodeURIComponent(NEAR_EMAIL)}`;
+  await adminPage.goto(mine);
   const adminBody = await adminPage.textContent("body");
   check("the request shows in the admin queue", adminBody.includes("Near Customer"));
   check("the customer's distance is displayed", /0\.\d mi/.test(adminBody));
@@ -274,24 +279,35 @@ try {
     (await custPage.textContent("body")).includes("we have you on the route"),
   );
 
-  await adminPage.goto(`${BASE}/admin?status=planned`);
+  await adminPage.goto(`${mine}&status=planned`);
   check(
     "the status filter narrows the queue",
     (await adminPage.textContent("body")).includes("Near Customer"),
   );
 
-  await adminPage.goto(`${BASE}/admin?status=completed`);
+  // Filter on a search term nothing can match. Asserting on a *status*
+  // assumed an empty database, which breaks the moment the owner has done
+  // any real work — the suite must not depend on rows it did not create.
+  await adminPage.goto(`${BASE}/admin?q=zzz-no-such-customer-${stamp}`);
   check(
-    "filtering by a status with no rows shows the empty state",
+    "a filter matching nothing shows the empty state",
     (await adminPage.textContent("body")).includes("No requests match these filters"),
   );
 
-  await adminPage.goto(`${BASE}/admin`);
+  await adminPage.goto(mine);
   await clickButton(adminPage, "Mark completed");
-  await adminPage.waitForSelector("text=No actions", { timeout: 30000 });
+  // A completed request is terminal: the actions cell collapses to an em dash.
+  await adminPage.waitForFunction(
+    () => !document.body.innerText.includes("Mark completed"),
+    { timeout: 30000 },
+  );
   check("planned -> completed, and the row becomes terminal", true);
 
+  // The page is already sitting on /dashboard, so navigating to the same URL
+  // does not necessarily re-fetch. Force it — the status was changed by the
+  // admin in another context, so nothing on this page triggered a refresh.
   await custPage.goto(`${BASE}/dashboard`);
+  await custPage.reload({ waitUntil: "networkidle" });
   const custBody = await custPage.textContent("body");
   check(
     "a completed request moves to history with no cancel button",
@@ -301,13 +317,16 @@ try {
   // -------------------------------------------------------------------
   section("Cancellation");
   await custPage.goto(`${BASE}/dashboard/schedule`);
-  await custPage.selectOption("#type", "dropoff");
+  await custPage.click('label:has(#type-dropoff)');
   await clickButton(custPage, "Submit request");
   await custPage.waitForSelector("text=Request submitted", { timeout: 30000 });
 
   await custPage.goto(`${BASE}/dashboard`);
-  custPage.on("dialog", (dialog) => dialog.accept());
+  // Cancelling now opens an in-app confirmation dialog rather than
+  // window.confirm, so the flow is: open it, then confirm.
   await clickButton(custPage, "Cancel");
+  await custPage.waitForSelector('[role="dialog"]', { timeout: 15000 });
+  await clickButton(custPage, "Cancel request");
   await custPage.waitForSelector("text=Nothing scheduled", { timeout: 30000 });
   check("a customer can cancel an open request", true);
 
@@ -331,7 +350,7 @@ try {
   );
 
   await custPage.goto(`${BASE}/dashboard/schedule`);
-  const disabled = await custPage.isDisabled("#type");
+  const disabled = await custPage.isDisabled("#type-pickup");
   check("the scheduling form is disabled for them", disabled);
 
   // -------------------------------------------------------------------

@@ -1,15 +1,17 @@
 import Link from "next/link";
 
+import { Container } from "@/components/layout/container";
+import { PageHeader } from "@/components/layout/page-header";
+import { SiteHeader } from "@/components/layout/site-header";
 import { ScheduleForm } from "@/components/schedule-form";
-import { SiteHeader } from "@/components/site-header";
-import { Alert, Card, PageHeading } from "@/components/ui";
+import { Alert } from "@/components/ui/alert";
+import { Card } from "@/components/ui/card";
 import { requireCustomer } from "@/lib/auth";
 import { addDaysISO, MAX_ADVANCE_DAYS, todayISO } from "@/lib/dates";
 import { formatMiles } from "@/lib/geo";
 import { getSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
-
 export const metadata = { title: "Schedule · Laundry Portal" };
 
 export default async function SchedulePage() {
@@ -21,59 +23,58 @@ export default async function SchedulePage() {
     settings !== null &&
     user.distance_miles !== null &&
     user.distance_miles > settings.service_radius_miles;
-
   const blocked = !settings || outOfRange;
 
   return (
     <>
       <SiteHeader />
-      <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-10 sm:px-6">
-        <PageHeading
-          title="Schedule a pickup or drop-off"
-          description={
-            settings
-              ? `We will collect from or deliver to ${user.address_line1}${
-                  user.city ? `, ${user.city}` : ""
-                }.`
-              : undefined
-          }
-        />
-
-        {!settings ? (
-          <div className="mb-6">
-            <Alert tone="warning" title="Scheduling is unavailable">
-              The laundromat has not published its service area yet. Please
-              check back shortly.
-            </Alert>
-          </div>
-        ) : null}
-
-        {outOfRange ? (
-          <div className="mb-6">
-            <Alert tone="error" title="Your address is outside our service area">
-              Your address is {formatMiles(user.distance_miles!)} miles from{" "}
-              {settings!.name}; our limit is{" "}
-              {formatMiles(settings!.service_radius_miles)} miles.{" "}
-              <Link href="/dashboard/profile" className="font-medium underline underline-offset-4">
-                Update your address
-              </Link>{" "}
-              to book again.
-            </Alert>
-          </div>
-        ) : null}
-
-        <Card>
-          <ScheduleForm
-            minDate={today}
-            maxDate={addDaysISO(today, MAX_ADVANCE_DAYS)}
-            disabled={blocked}
+      <main className="flex-1 py-8">
+        <Container size="md">
+          <PageHeader
+            title="Schedule a pickup or drop-off"
+            description={
+              settings
+                ? `We will collect from or deliver to ${user.address_line1}${
+                    user.city ? `, ${user.city}` : ""
+                  }.`
+                : undefined
+            }
           />
-        </Card>
 
-        <p className="mt-4 text-xs text-muted">
-          You can hold one open pickup and one open drop-off per day. Requests
-          can be booked up to {MAX_ADVANCE_DAYS} days ahead.
-        </p>
+          {!settings ? (
+            <div className="mb-6">
+              <Alert tone="warning" title="Scheduling is unavailable">
+                The laundromat has not published its service area yet. Please
+                check back shortly.
+              </Alert>
+            </div>
+          ) : null}
+
+          {outOfRange ? (
+            <div className="mb-6">
+              <Alert tone="error" title="Your address is outside our service area">
+                Your address is {formatMiles(user.distance_miles!)} miles from{" "}
+                {settings!.name}; our limit is{" "}
+                {formatMiles(settings!.service_radius_miles)} miles.{" "}
+                <Link href="/dashboard/profile">Update your address</Link> to book
+                again.
+              </Alert>
+            </div>
+          ) : null}
+
+          <Card className="p-6">
+            <ScheduleForm
+              minDate={today}
+              maxDate={addDaysISO(today, MAX_ADVANCE_DAYS)}
+              disabled={blocked}
+            />
+          </Card>
+
+          <p className="mt-4 text-xs text-fg-subtle">
+            You can hold one open pickup and one open drop-off per day. Requests
+            can be booked up to {MAX_ADVANCE_DAYS} days ahead.
+          </p>
+        </Container>
       </main>
     </>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import { Loader2, MapPin } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import type {
@@ -7,7 +8,8 @@ import type {
   ResolvedAddress,
   SuggestScope,
 } from "@/lib/places/types";
-import { cn } from "./ui";
+import { cn } from "@/lib/cn";
+import { controlClasses } from "./ui/field";
 
 const DEBOUNCE_MS = 350;
 const MIN_QUERY_LENGTH = 3;
@@ -315,22 +317,14 @@ export function AddressAutocomplete({
           activeIndex >= 0 ? `${listId}-option-${activeIndex}` : undefined
         }
         aria-invalid={invalid || undefined}
-        className={cn(
-          "w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none",
-          "transition focus:border-brand focus:ring-2 focus:ring-brand/25",
-          "disabled:cursor-not-allowed disabled:opacity-60",
-          invalid && "border-red-500 focus:border-red-500 focus:ring-red-500/25",
-          className,
-        )}
+        className={cn(controlClasses, "h-9", className)}
       />
 
       {loading || resolving ? (
-        <span
+        <Loader2
           aria-hidden
-          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted"
-        >
-          …
-        </span>
+          className="pointer-events-none absolute right-3 top-1/2 size-3.5 -translate-y-1/2 animate-spin text-fg-subtle"
+        />
       ) : null}
 
       <ul
@@ -338,8 +332,8 @@ export function AddressAutocomplete({
         role="listbox"
         hidden={!open || suggestions.length === 0}
         className={cn(
-          "absolute z-20 mt-1 max-h-80 w-full overflow-y-auto rounded-lg",
-          "border border-line bg-surface shadow-lg",
+          "absolute z-30 mt-1.5 max-h-80 w-full overflow-y-auto overscroll-contain",
+          "rounded-lg border border-line bg-surface p-1 shadow-lg",
         )}
       >
         {suggestions.map((suggestion, index) => (
@@ -356,11 +350,20 @@ export function AddressAutocomplete({
             }}
             onMouseEnter={() => setActiveIndex(index)}
             className={cn(
-              "cursor-pointer border-b border-line px-4 py-2.5 text-sm last:border-b-0",
-              index === activeIndex ? "bg-brand/10" : "bg-transparent",
+              "flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
+              index === activeIndex
+                ? "bg-surface-sunken text-fg"
+                : "text-fg-muted",
             )}
           >
-            {suggestion.label}
+            <MapPin
+              aria-hidden
+              className={cn(
+                "size-3.5 shrink-0",
+                index === activeIndex ? "text-brand" : "text-fg-subtle",
+              )}
+            />
+            <span className="truncate">{suggestion.label}</span>
           </li>
         ))}
       </ul>

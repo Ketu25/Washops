@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import type { ResolvedAddress } from "@/lib/places/types";
 import { AddressAutocomplete } from "./address-autocomplete";
-import { Field, Input } from "./ui";
 
 export interface AddressDefaults {
   addressLine1?: string;
@@ -53,12 +54,13 @@ export function AddressFields({
   }
 
   return (
-    <>
+    <div className="flex flex-col gap-4">
       <Field
         label="Street address"
         htmlFor="addressLine1"
         error={errors.addressLine1}
         hint="Start typing and pick your address from the list."
+        required
       >
         <AddressAutocomplete
           id="addressLine1"
@@ -91,8 +93,8 @@ export function AddressFields({
         />
       </Field>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Field label="City" htmlFor="city" error={errors.city}>
+      <div className="grid gap-4 sm:grid-cols-[1fr_7rem_9rem]">
+        <Field label="City" htmlFor="city" error={errors.city} required>
           <AddressAutocomplete
             id="city"
             name="city"
@@ -108,7 +110,7 @@ export function AddressFields({
           />
         </Field>
 
-        <Field label="State" htmlFor="state" error={errors.state}>
+        <Field label="State" htmlFor="state" error={errors.state} required>
           <AddressAutocomplete
             id="state"
             name="state"
@@ -121,7 +123,7 @@ export function AddressFields({
           />
         </Field>
 
-        <Field label="ZIP code" htmlFor="postalCode" error={errors.postalCode}>
+        <Field label="ZIP code" htmlFor="postalCode" error={errors.postalCode} required>
           <AddressAutocomplete
             id="postalCode"
             name="postalCode"
@@ -138,6 +140,6 @@ export function AddressFields({
           />
         </Field>
       </div>
-    </>
+    </div>
   );
 }

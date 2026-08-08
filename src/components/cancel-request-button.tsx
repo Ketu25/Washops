@@ -1,10 +1,12 @@
 "use client";
 
-import { useActionState } from "react";
+import { X } from "lucide-react";
+import { useActionState, useRef } from "react";
 
 import type { FormState } from "@/app/actions/auth";
 import { cancelRequestAction } from "@/app/actions/requests";
-import { SubmitButton } from "./submit-button";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 const initialState: FormState = {};
 
@@ -16,22 +18,28 @@ export function CancelRequestButton({
   label: string;
 }) {
   const [state, formAction] = useActionState(cancelRequestAction, initialState);
+  const formRef = useRef<HTMLFormElement>(null);
 
   return (
-    <form action={formAction} className="flex flex-col items-end gap-1">
-      <input type="hidden" name="requestId" value={requestId} />
-      <SubmitButton
-        variant="danger"
-        pendingLabel="Cancelling…"
-        confirm={`Cancel your ${label}? This cannot be undone.`}
-      >
-        Cancel
-      </SubmitButton>
+    <div className="flex flex-col items-end gap-1">
+      <form ref={formRef} action={formAction}>
+        <input type="hidden" name="requestId" value={requestId} />
+        <ConfirmDialog
+          trigger={
+            <Button type="button" variant="danger" size="sm">
+              <X aria-hidden />
+              Cancel
+            </Button>
+          }
+          title="Cancel this request?"
+          description={`Your ${label} will be cancelled. This cannot be undone, though you can book that day again afterwards.`}
+          confirmLabel="Cancel request"
+          onConfirm={() => formRef.current?.requestSubmit()}
+        />
+      </form>
       {state.error ? (
-        <p className="max-w-xs text-right text-xs text-red-600 dark:text-red-400">
-          {state.error}
-        </p>
+        <p className="max-w-64 text-right text-xs text-danger-fg">{state.error}</p>
       ) : null}
-    </form>
+    </div>
   );
 }
