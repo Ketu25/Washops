@@ -12,6 +12,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Cloudflare build output. Flat config only ignores node_modules by
+    // default, so without these ESLint tries to parse the bundled Next.js
+    // server in .open-next and exhausts the heap.
+    ".open-next/**",
+    ".wrangler/**",
+    "cloudflare-env.d.ts",
   ]),
 ]);
 
