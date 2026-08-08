@@ -63,8 +63,15 @@ async function readSession(): Promise<SessionPayload | null> {
   const token = store.get(SESSION_COOKIE)?.value;
   if (!token) return null;
 
+  // Resolve the key OUTSIDE the try. Inside it, a missing or too-short
+  // SESSION_SECRET would be swallowed by the catch below and reported as
+  // "not signed in" — so a misconfigured deployment would look like an
+  // ordinary logged-out visitor on every page, while login itself 500s. A
+  // configuration fault must not be indistinguishable from a bad cookie.
+  const key = secretKey();
+
   try {
-    const { payload } = await jwtVerify(token, secretKey(), {
+    const { payload } = await jwtVerify(token, key, {
       algorithms: ["HS256"],
     });
     if (typeof payload.sub !== "string") return null;

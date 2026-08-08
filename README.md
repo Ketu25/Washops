@@ -105,6 +105,23 @@ bundle — and if unset during the build, silently fall back to the server's
 zone, which is UTC on Workers. That would make same-day bookings vanish after
 7pm Eastern.
 
+### Diagnosing a deployment
+
+`GET /api/health` reports what is missing:
+
+```json
+{ "ok": false, "missingRequired": ["SESSION_SECRET"], "database": "reachable" }
+```
+
+It returns 503 when something is wrong and names only the variables that are
+**absent** — never a value — so it is safe to leave reachable.
+
+Worth knowing because a missing variable is otherwise close to undiagnosable:
+it only throws on the code path that happens to read it, so the app looks
+half-working. A missing `SESSION_SECRET` lets every page render and every
+wrong-password login return normally, then fails with an opaque 500 the moment
+someone signs in successfully — because that is the first line that needs it.
+
 ### Variables are deleted on deploy unless you guard them
 
 `wrangler deploy` treats `wrangler.jsonc` as the complete configuration and
