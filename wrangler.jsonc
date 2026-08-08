@@ -22,12 +22,18 @@
     "enabled": true
   },
 
-  // Password hashing is deliberately expensive. bcryptjs is pure JavaScript,
-  // so a cost-12 hash burns a few hundred milliseconds of CPU — far past the
-  // 10ms free-plan ceiling, and past the 30s default only under load. This
-  // raises the ceiling on paid plans; on the free plan, sign-in and
-  // registration will exceed CPU limits regardless of this setting.
-  "limits": {
-    "cpu_ms": 60000
-  }
+  // Environment variables live in the Cloudflare dashboard, not here, so the
+  // repo stays free of project-specific values. By default `wrangler deploy`
+  // treats this file as the whole truth and DELETES any dashboard var it does
+  // not declare — which would wipe the Supabase and Google credentials on
+  // every deploy and break the app at runtime. This keeps them.
+  //
+  // Secrets (set as type "Secret") are stored separately and survive deploys
+  // regardless; this flag is what protects plain-text vars.
+  "keep_vars": true
+
+  // NOTE: no "limits.cpu_ms" here. Setting it fails the deploy outright on
+  // the Free plan ("CPU limits are not supported for the Free plan"
+  // [code: 100328]). See the README for why bcrypt still needs attention on
+  // that plan — the limit is the symptom, not something config can fix.
 }

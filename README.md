@@ -105,19 +105,40 @@ bundle — and if unset during the build, silently fall back to the server's
 zone, which is UTC on Workers. That would make same-day bookings vanish after
 7pm Eastern.
 
+### Variables are deleted on deploy unless you guard them
+
+`wrangler deploy` treats `wrangler.jsonc` as the complete configuration and
+removes any dashboard variable it does not declare. The deploy log shows this
+as `- VAR_NAME` lines under `vars:` followed by *"Deploying the Worker will
+override the remote configuration with your local one."* Left alone, every
+deploy would wipe the Supabase and Google credentials and the app would throw
+on the next request.
+
+`"keep_vars": true` in `wrangler.jsonc` prevents that. Values still live in the
+dashboard, so no project-specific data sits in this repo.
+
+**Set the three credentials as type "Secret", not "Text".** Secrets are stored
+separately, are never printed, and survive deploys on their own. Plain-text
+vars are echoed into the build log in full — anyone who can read your build
+history can read the key.
+
 ### bcrypt and the CPU limit
 
 Password hashing is deliberately slow, and `bcryptjs` is pure JavaScript, so a
 cost-12 hash burns a few hundred milliseconds of **CPU** — not wall time.
 
-- **Free plan (10ms CPU/request): sign-in and registration will fail.** No
-  configuration fixes this; the work genuinely exceeds the ceiling.
-- **Paid plan:** works. `limits.cpu_ms` in `wrangler.jsonc` raises the ceiling.
+- **Paid plan:** works. `limits.cpu_ms` may be set in `wrangler.jsonc` to raise
+  the ceiling further.
+- **Free plan:** sign-in and registration exceed the CPU ceiling. Setting
+  `limits.cpu_ms` does not help — it is rejected outright, failing the deploy
+  with *"CPU limits are not supported for the Free plan"* [code: 100328].
 
-If you need the free plan, the options are lowering `BCRYPT_ROUNDS` in
-`src/lib/auth.ts` (weaker hashes, roughly 4x faster per step down), or moving
-auth to a platform without a hard CPU cap. Both are real trade-offs, not
-tuning.
+Lowering `BCRYPT_ROUNDS` does not rescue the free plan either: each step down
+roughly halves the work, and the gap is two orders of magnitude, so you would
+reach an insecure cost factor long before you reached the limit. The real
+options are Workers Paid, replacing bcrypt with a Web Crypto PBKDF2 hash
+(native, far cheaper in CPU terms, and a schema migration for existing
+passwords), or hosting where there is no hard per-request CPU cap.
 
 ### Cloudflare build settings
 
