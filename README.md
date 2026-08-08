@@ -119,11 +119,38 @@ If you need the free plan, the options are lowering `BCRYPT_ROUNDS` in
 auth to a platform without a hard CPU cap. Both are real trade-offs, not
 tuning.
 
+### Cloudflare build settings
+
+In the Worker's **Settings → Build**, the build command must be:
+
+```
+npm run cf:build          # NOT the default `npm run build`
+```
+
+Deploy command stays the default `npx wrangler deploy`.
+
+This matters because the two steps are not interchangeable. `npm run build`
+runs `next build`, which produces `.next/` — but the deploy step uploads
+`.open-next/`, which only `opennextjs-cloudflare build` generates. Leave the
+default in place and the deploy fails with *"Could not find compiled Open Next
+config, did you run the build command?"*, referring to
+`.open-next/.build/open-next.config.mjs`.
+
+`opennextjs-cloudflare build` runs `next build` itself, so this is one build,
+not two.
+
+Before the Cloudflare config was committed, this worked by accident: with no
+`wrangler.jsonc` present, Cloudflare ran an interactive migration that happened
+to invoke the OpenNext build as a side effect. Committing the config — which is
+what fixes the Worker-name mismatch — correctly skips that migration, so the
+build command has to do the job explicitly.
+
 ### Commands
 
 ```bash
-npm run preview   # build the Worker and run it locally in workerd
-npm run deploy    # build and deploy
+npm run cf:build  # build the Worker bundle into .open-next/
+npm run preview   # build and run it locally in workerd
+npm run deploy    # build and deploy from your machine
 ```
 
 ---
