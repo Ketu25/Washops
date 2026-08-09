@@ -14,7 +14,7 @@ import { cn } from "@/lib/cn";
  * Filters live in the URL rather than component state so an admin can
  * bookmark "today's pending pickups" and send it to a driver.
  */
-export function RequestFilters({ today }: { today: string }) {
+export function RequestFilters() {
   const router = useRouter();
   const params = useSearchParams();
   const [isPending, startTransition] = useTransition();
@@ -32,7 +32,9 @@ export function RequestFilters({ today }: { today: string }) {
   const type = params.get("type") ?? "all";
   const date = params.get("date") ?? "";
   const search = params.get("q") ?? "";
-  const active = status !== "all" || type !== "all" || date !== "" || search !== "";
+  const from = params.get("from") ?? "";
+  const active =
+    status !== "all" || type !== "all" || date !== "" || from !== "" || search !== "";
 
   return (
     <div
@@ -67,6 +69,7 @@ export function RequestFilters({ today }: { today: string }) {
           onChange={(event) => apply("status", event.target.value)}
         >
           <option value="all">All statuses</option>
+          <option value="open">Open (pending or planned)</option>
           <option value="awaiting_dropoff">Awaiting drop-off</option>
           <option value="pending">Pending</option>
           <option value="planned">Planned</option>
@@ -99,14 +102,13 @@ export function RequestFilters({ today }: { today: string }) {
       </div>
 
       <div className="flex gap-2">
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => startTransition(() => router.replace(`/admin?date=${today}`))}
-        >
-          Today
-        </Button>
-        {/* Only offered when there is something to clear. */}
+        {/*
+          No "Today" shortcut here any more — the Today stat card above does
+          the same job and states its count, so two controls for one question
+          would just disagree with each other.
+
+          Only offered when there is something to clear.
+        */}
         {active ? (
           <Button
             type="button"

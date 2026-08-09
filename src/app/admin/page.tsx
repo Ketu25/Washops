@@ -42,6 +42,7 @@ const TYPES: RequestType[] = ["pickup", "dropoff"];
 
 function parseStatus(value?: string): AdminStatusFilter {
   if (value === "awaiting_dropoff") return "awaiting_dropoff";
+  if (value === "open") return "open";
   return STATUSES.includes(value as RequestStatus)
     ? (value as RequestStatus)
     : "all";
@@ -61,6 +62,7 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
     status: parseStatus(params.status as string | undefined),
     type: parseType(params.type as string | undefined),
     date: parseDate(params.date as string | undefined),
+    from: parseDate(params.from as string | undefined),
     search: typeof params.q === "string" ? params.q : undefined,
   };
 
@@ -73,6 +75,22 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
 
   const today = todayISO();
   const maxDate = addDaysISO(today, MAX_ADVANCE_DAYS);
+
+  /**
+   * Each card links to the filter that returns exactly the rows it counted —
+   * a card reading 4 that shows 7 rows is a bug an operator will not forgive.
+   * "Today" and "Upcoming" therefore carry status=open, because both counts
+   * are of open work, not of every request on those dates.
+   *
+   * Clicking the active card clears the filter, so the cards behave as a
+   * toggle rather than a one-way trip that needs the Reset button.
+   */
+  const cardHref = (query: string, isActive: boolean) =>
+    isActive ? "/admin" : `/admin?${query}`;
+
+  const activeStatus = filters.status;
+  const isToday = activeStatus === "open" && filters.date === today;
+  const isUpcoming = activeStatus === "open" && filters.from === today;
 
   return (
     <>
@@ -115,6 +133,8 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
               hint="Awaiting confirmation"
               icon={Clock3}
               tone="warning"
+              active={activeStatus === "pending"}
+              href={cardHref("status=pending", activeStatus === "pending")}
             />
             <StatCard
               label="Planned"
@@ -122,6 +142,8 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
               hint="On the route"
               icon={Truck}
               tone="brand"
+              active={activeStatus === "planned"}
+              href={cardHref("status=planned", activeStatus === "planned")}
             />
             <StatCard
               label="Awaiting drop-off"
@@ -129,6 +151,11 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
               hint="Collected, not yet booked back"
               icon={PackageOpen}
               tone={stats.awaitingDropoff > 0 ? "warning" : "neutral"}
+              active={activeStatus === "awaiting_dropoff"}
+              href={cardHref(
+                "status=awaiting_dropoff",
+                activeStatus === "awaiting_dropoff",
+              )}
             />
             <StatCard
               label="Today"
@@ -139,18 +166,22 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
                 stats.todayDropoffs === 1 ? "" : "s"
               }`}
               icon={CalendarDays}
+              active={isToday}
+              href={cardHref(`status=open&date=${today}`, isToday)}
             />
             <StatCard
               label="Upcoming"
               value={stats.upcomingWeek}
               hint="Open requests today or later"
               icon={ClipboardList}
+              active={isUpcoming}
+              href={cardHref(`status=open&from=${today}`, isUpcoming)}
             />
           </div>
 
           <Card className="mb-4 p-4">
             <Suspense fallback={<div className="h-16" />}>
-              <RequestFilters today={today} />
+              <RequestFilters />
             </Suspense>
           </Card>
 

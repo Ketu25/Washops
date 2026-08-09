@@ -191,16 +191,28 @@ export async function cancelRequest(
 }
 
 /**
- * "awaiting_dropoff" is not a stored status — it is completed pickups with
- * no live return booked. It lives alongside the real statuses because that
- * is how an operator thinks about the queue.
+ * Two of these are not stored statuses:
+ *
+ *   "open"            pending or planned — anything still to be done
+ *   "awaiting_dropoff" completed pickups with no live return booked
+ *
+ * They live alongside the real statuses because that is how an operator
+ * thinks about the queue, and because the dashboard counts are expressed in
+ * exactly these terms. A stat card that reads 4 has to show 4 rows.
  */
-export type AdminStatusFilter = RequestStatus | "all" | "awaiting_dropoff";
+export type AdminStatusFilter =
+  | RequestStatus
+  | "all"
+  | "open"
+  | "awaiting_dropoff";
 
 export interface AdminRequestFilters {
   status?: AdminStatusFilter;
   type?: RequestType | "all";
+  /** Exact scheduled date. */
   date?: string;
+  /** Inclusive lower bound, for "today or later". */
+  from?: string;
   search?: string;
 }
 
@@ -218,6 +230,8 @@ export async function listAdminRequests(
 
   if (filters.status === "awaiting_dropoff") {
     query = query.eq("type", "pickup").eq("status", "completed");
+  } else if (filters.status === "open") {
+    query = query.in("status", OPEN_STATUSES);
   } else if (filters.status && filters.status !== "all") {
     query = query.eq("status", filters.status);
   }
@@ -226,6 +240,9 @@ export async function listAdminRequests(
   }
   if (filters.date) {
     query = query.eq("scheduled_date", filters.date);
+  }
+  if (filters.from) {
+    query = query.gte("scheduled_date", filters.from);
   }
 
   const { data, error } = await query;

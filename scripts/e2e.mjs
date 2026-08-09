@@ -428,6 +428,48 @@ try {
   );
 
   // -------------------------------------------------------------------
+  section("Dashboard cards filter the queue");
+  const countRows = async () => {
+    const body = await adminPage.textContent("body");
+    if (body.includes("No requests match")) return 0;
+    const m = body.match(/Showing (\d+) request/);
+    return m ? Number(m[1]) : -1;
+  };
+
+  await adminPage.goto(`${BASE}/admin`);
+  const statCards = await adminPage.$$eval('a[href^="/admin?"]', (els) =>
+    els.map((el) => ({
+      label: el.querySelector("p")?.textContent?.trim() ?? "",
+      count: Number(el.querySelectorAll("p")[1]?.textContent?.trim() ?? "NaN"),
+      href: el.getAttribute("href"),
+    })),
+  );
+  check("every stat card links to a filter", statCards.length === 5);
+
+  // The invariant that makes the cards trustworthy: a card reading 4 must
+  // show exactly 4 rows. "Today" and "Upcoming" count only OPEN work, so
+  // their links carry status=open — without it they would over-report.
+  const mismatched = [];
+  for (const card of statCards) {
+    await adminPage.goto(BASE + card.href);
+    const shown = await countRows();
+    if (shown !== card.count) {
+      mismatched.push(`${card.label}: card=${card.count} rows=${shown}`);
+    }
+  }
+  check(
+    "each card's count equals the rows its filter returns",
+    mismatched.length === 0,
+    mismatched.join("; "),
+  );
+
+  await adminPage.goto(`${BASE}/admin?status=pending`);
+  check(
+    "the active card is marked and clicking it clears the filter",
+    (await adminPage.getAttribute('a[aria-current="true"]', "href")) === "/admin",
+  );
+
+  // -------------------------------------------------------------------
   section("Cancellation");
   // Today's pickup is already completed, so book a different day.
   const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
