@@ -14,7 +14,6 @@ import { canTransition } from "./transitions";
 import {
   CANCELLABLE_STATUSES,
   OPEN_STATUSES,
-  REQUEST_TYPE_LABEL,
   type PublicUser,
   type RequestRow,
   type RequestStatus,
@@ -24,7 +23,7 @@ import {
 } from "./types";
 
 const REQUEST_COLUMNS =
-  "id, user_id, type, status, scheduled_date, time_window, notes, admin_notes, " +
+  "id, user_id, type, parent_pickup_id, status, scheduled_date, time_window, notes, admin_notes, " +
   "address_line1, address_line2, city, state, postal_code, formatted_address, " +
   "latitude, longitude, distance_miles, planned_at, completed_at, cancelled_at, " +
   "created_at, updated_at";
@@ -34,14 +33,14 @@ export type ActionResult<T = undefined> =
   | { ok: false; error: string };
 
 export interface CreateRequestInput {
-  type: RequestType;
   scheduledDate: string;
   timeWindow: TimeWindow;
   notes?: string | null;
 }
 
 /**
- * Create a pickup or drop-off request.
+ * Create a PICKUP request. Customers cannot book their own return — the
+ * admin schedules that once the pickup is completed (see scheduleDropoff).
  *
  * The customer's address was already geocoded when they registered or last
  * updated their profile, so we reuse those coordinates instead of burning a
@@ -105,7 +104,7 @@ export async function createRequest(
     .from("requests")
     .insert({
       user_id: user.id,
-      type: input.type,
+      type: "pickup" satisfies RequestType,
       status: "pending" satisfies RequestStatus,
       scheduled_date: input.scheduledDate,
       time_window: input.timeWindow,
@@ -130,9 +129,9 @@ export async function createRequest(
     if (error.code === "23505") {
       return {
         ok: false,
-        error: `You already have an open ${REQUEST_TYPE_LABEL[
-          input.type
-        ].toLowerCase()} request for that date. Cancel it first to book a different time.`,
+        error:
+          "You already have an open pickup request for that date. " +
+          "Cancel it first to book a different time.",
       };
     }
     return { ok: false, error: `Could not create the request: ${error.message}` };
@@ -156,12 +155,12 @@ export async function listCustomerRequests(
 }
 
 /**
- * Cancel an open request.
+ * Cancel an open PICKUP.
  *
- * Ownership and the allowed statuses are both expressed in the WHERE clause,
- * so a customer cannot cancel someone else's request and a request the admin
- * just marked completed cannot be pulled back — the update simply matches
- * zero rows and we report why.
+ * Ownership, type and the allowed statuses are all expressed in the WHERE
+ * clause, so a customer cannot cancel someone else's request, cannot cancel a
+ * drop-off the laundromat scheduled, and cannot pull back something the admin
+ * just completed — the update simply matches zero rows and we report why.
  */
 export async function cancelRequest(
   userId: string,
@@ -172,6 +171,7 @@ export async function cancelRequest(
     .update({ status: "cancelled", cancelled_at: new Date().toISOString() })
     .eq("id", requestId)
     .eq("user_id", userId)
+    .eq("type", "pickup")
     .in("status", CANCELLABLE_STATUSES)
     .select("id");
 
@@ -182,14 +182,23 @@ export async function cancelRequest(
     return {
       ok: false,
       error:
-        "That request can no longer be cancelled. It may already be completed or cancelled.",
+        "That request can no longer be cancelled. Drop-offs are arranged by " +
+        "the laundromat, and a completed or already-cancelled request cannot " +
+        "be withdrawn.",
     };
   }
   return { ok: true, data: undefined };
 }
 
+/**
+ * "awaiting_dropoff" is not a stored status — it is completed pickups with
+ * no live return booked. It lives alongside the real statuses because that
+ * is how an operator thinks about the queue.
+ */
+export type AdminStatusFilter = RequestStatus | "all" | "awaiting_dropoff";
+
 export interface AdminRequestFilters {
-  status?: RequestStatus | "all";
+  status?: AdminStatusFilter;
   type?: RequestType | "all";
   date?: string;
   search?: string;
@@ -207,7 +216,9 @@ export async function listAdminRequests(
     .order("time_window", { ascending: true })
     .limit(500);
 
-  if (filters.status && filters.status !== "all") {
+  if (filters.status === "awaiting_dropoff") {
+    query = query.eq("type", "pickup").eq("status", "completed");
+  } else if (filters.status && filters.status !== "all") {
     query = query.eq("status", filters.status);
   }
   if (filters.type && filters.type !== "all") {
@@ -221,6 +232,13 @@ export async function listAdminRequests(
   if (error) throw new Error(`Failed to load requests: ${error.message}`);
 
   let rows = (data ?? []) as unknown as RequestWithCustomer[];
+
+  // The pseudo-status needs the linkage that PostgREST cannot express in the
+  // same query, so narrow it here.
+  if (filters.status === "awaiting_dropoff") {
+    const awaiting = await listPickupsAwaitingDropoff();
+    rows = rows.filter((row) => awaiting.has(row.id));
+  }
 
   // Name/email search is applied in memory: it spans a joined table, which
   // PostgREST cannot filter on without an embedded-resource `!inner` join
@@ -243,6 +261,141 @@ export async function listAdminRequests(
   }
 
   return rows;
+}
+
+export interface ScheduleDropoffInput {
+  pickupId: string;
+  scheduledDate: string;
+  timeWindow: TimeWindow;
+  notes?: string | null;
+}
+
+/**
+ * Schedule the return of a completed pickup. Admin only.
+ *
+ * Two decisions worth stating, because both look like omissions:
+ *
+ * 1. NO service-area check. The customer's laundry is already at the shop.
+ *    If they moved out of range, or the owner shrank the radius after the
+ *    pickup, we still have to give the clothes back — refusing the return
+ *    would strand someone's property. Coverage gates who can *book*, not who
+ *    gets their belongings returned.
+ *
+ * 2. The address is copied from the PICKUP row, not from the user's current
+ *    profile. We collected from that address and that is where the driver is
+ *    returning to; a profile edit in between must not silently redirect a van.
+ */
+export async function scheduleDropoff(
+  input: ScheduleDropoffInput,
+): Promise<ActionResult<RequestRow>> {
+  const { data: pickup, error: readError } = await db()
+    .from("requests")
+    .select(REQUEST_COLUMNS)
+    .eq("id", input.pickupId)
+    .maybeSingle();
+
+  if (readError) {
+    return { ok: false, error: `Could not load the pickup: ${readError.message}` };
+  }
+  if (!pickup) {
+    return { ok: false, error: "That pickup no longer exists." };
+  }
+
+  const parent = pickup as unknown as RequestRow;
+
+  if (parent.type !== "pickup") {
+    return { ok: false, error: "A drop-off can only be scheduled against a pickup." };
+  }
+  if (parent.status !== "completed") {
+    return {
+      ok: false,
+      error:
+        "Mark the pickup completed first — the return can only be scheduled " +
+        "once the laundry is actually with you.",
+    };
+  }
+
+  const today = todayISO();
+  if (isPastDate(input.scheduledDate, today)) {
+    return { ok: false, error: "Please choose today or a future date." };
+  }
+  if (isTooFarAhead(input.scheduledDate, today)) {
+    return {
+      ok: false,
+      error: `Drop-offs can be scheduled up to ${MAX_ADVANCE_DAYS} days ahead.`,
+    };
+  }
+  // Returning laundry before it was collected is not a thing.
+  if (input.scheduledDate < parent.scheduled_date) {
+    return {
+      ok: false,
+      error: `The return cannot be earlier than the pickup on ${parent.scheduled_date}.`,
+    };
+  }
+
+  const { data, error } = await db()
+    .from("requests")
+    .insert({
+      user_id: parent.user_id,
+      type: "dropoff" satisfies RequestType,
+      parent_pickup_id: parent.id,
+      // The admin created it, so there is nobody left to confirm it.
+      status: "planned" satisfies RequestStatus,
+      planned_at: new Date().toISOString(),
+      scheduled_date: input.scheduledDate,
+      time_window: input.timeWindow,
+      notes: input.notes?.trim() || null,
+      address_line1: parent.address_line1,
+      address_line2: parent.address_line2,
+      city: parent.city,
+      state: parent.state,
+      postal_code: parent.postal_code,
+      formatted_address: parent.formatted_address,
+      latitude: parent.latitude,
+      longitude: parent.longitude,
+      distance_miles: parent.distance_miles,
+    })
+    .select(REQUEST_COLUMNS)
+    .single();
+
+  if (error) {
+    // The partial unique index on parent_pickup_id. Reaching it means two
+    // admins scheduled the same return at once, or a double submit.
+    if (error.code === "23505") {
+      return {
+        ok: false,
+        error: "A drop-off is already scheduled for that pickup.",
+      };
+    }
+    return { ok: false, error: `Could not schedule the drop-off: ${error.message}` };
+  }
+
+  return { ok: true, data: data as unknown as RequestRow };
+}
+
+/**
+ * Completed pickups with no live return booked — the work the admin has to
+ * act on next, and the step most likely to be forgotten, since the customer's
+ * laundry is sitting at the shop with nothing scheduled to bring it back.
+ */
+export async function listPickupsAwaitingDropoff(): Promise<Set<string>> {
+  const { data: completed } = await db()
+    .from("requests")
+    .select("id")
+    .eq("type", "pickup")
+    .eq("status", "completed");
+
+  const ids = (completed ?? []).map((row) => row.id as string);
+  if (ids.length === 0) return new Set();
+
+  const { data: returns } = await db()
+    .from("requests")
+    .select("parent_pickup_id")
+    .in("parent_pickup_id", ids)
+    .in("status", ["pending", "planned", "completed"]);
+
+  const covered = new Set((returns ?? []).map((row) => row.parent_pickup_id as string));
+  return new Set(ids.filter((id) => !covered.has(id)));
 }
 
 export async function setRequestStatus(
@@ -305,6 +458,7 @@ export async function setRequestStatus(
 export interface DashboardStats {
   pending: number;
   planned: number;
+  awaitingDropoff: number;
   completed: number;
   cancelled: number;
   today: number;
@@ -327,6 +481,8 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   function baseCount() {
     return db().from("requests").select("id", { count: "exact", head: true });
   }
+
+  const awaitingDropoffIds = await listPickupsAwaitingDropoff();
 
   const [
     pending,
@@ -357,6 +513,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   return {
     pending,
     planned,
+    awaitingDropoff: awaitingDropoffIds.size,
     completed,
     cancelled,
     today: todayCount,

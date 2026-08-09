@@ -6,12 +6,23 @@ import { requireAdmin, requireCustomer } from "@/lib/auth";
 import {
   cancelRequest,
   createRequest,
+  scheduleDropoff,
   setRequestStatus,
 } from "@/lib/requests";
 import type { RequestStatus } from "@/lib/types";
-import { createRequestSchema, fieldErrors } from "@/lib/validation";
+import {
+  createRequestSchema,
+  fieldErrors,
+  scheduleDropoffSchema,
+} from "@/lib/validation";
 
 import type { FormState } from "./auth";
+
+/** Both portals show request data, so a change on either must refresh both. */
+function revalidateRequestViews() {
+  revalidatePath("/dashboard");
+  revalidatePath("/admin");
+}
 
 export async function createRequestAction(
   _prev: FormState,
@@ -20,7 +31,6 @@ export async function createRequestAction(
   const user = await requireCustomer();
 
   const raw = {
-    type: String(formData.get("type") ?? ""),
     scheduledDate: String(formData.get("scheduledDate") ?? ""),
     timeWindow: String(formData.get("timeWindow") ?? ""),
     notes: String(formData.get("notes") ?? ""),
@@ -31,20 +41,20 @@ export async function createRequestAction(
     return { fieldErrors: fieldErrors(parsed.error), values: raw };
   }
 
+  // `type` is never read from the form: customers book pickups, and the
+  // return is the laundromat's to schedule.
   const result = await createRequest(user, {
-    type: parsed.data.type,
     scheduledDate: parsed.data.scheduledDate,
     timeWindow: parsed.data.timeWindow,
     notes: parsed.data.notes || null,
   });
 
-  if (!result.ok) {
-    return { error: result.error, values: raw };
-  }
+  if (!result.ok) return { error: result.error, values: raw };
 
-  revalidatePath("/dashboard");
-  revalidatePath("/admin");
-  return { success: "Your request has been submitted and is awaiting confirmation." };
+  revalidateRequestViews();
+  return {
+    success: "Your pickup has been submitted and is awaiting confirmation.",
+  };
 }
 
 export async function cancelRequestAction(
@@ -54,18 +64,13 @@ export async function cancelRequestAction(
   const user = await requireCustomer();
   const requestId = String(formData.get("requestId") ?? "");
 
-  if (!requestId) {
-    return { error: "Missing request reference." };
-  }
+  if (!requestId) return { error: "Missing request reference." };
 
   const result = await cancelRequest(user.id, requestId);
-  if (!result.ok) {
-    return { error: result.error };
-  }
+  if (!result.ok) return { error: result.error };
 
-  revalidatePath("/dashboard");
-  revalidatePath("/admin");
-  return { success: "Request cancelled." };
+  revalidateRequestViews();
+  return { success: "Pickup cancelled." };
 }
 
 const ADMIN_STATUSES: RequestStatus[] = ["planned", "completed", "cancelled"];
@@ -85,11 +90,43 @@ export async function updateRequestStatusAction(
   }
 
   const result = await setRequestStatus(requestId, status);
-  if (!result.ok) {
-    return { error: result.error };
+  if (!result.ok) return { error: result.error };
+
+  revalidateRequestViews();
+  return { success: `Request marked as ${status}.` };
+}
+
+/**
+ * Schedule the return of a completed pickup. Admin only — this is the half
+ * of the workflow the customer does not control.
+ */
+export async function scheduleDropoffAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  await requireAdmin();
+
+  const raw = {
+    pickupId: String(formData.get("pickupId") ?? ""),
+    scheduledDate: String(formData.get("scheduledDate") ?? ""),
+    timeWindow: String(formData.get("timeWindow") ?? ""),
+    notes: String(formData.get("notes") ?? ""),
+  };
+
+  const parsed = scheduleDropoffSchema.safeParse(raw);
+  if (!parsed.success) {
+    return { fieldErrors: fieldErrors(parsed.error), values: raw };
   }
 
-  revalidatePath("/admin");
-  revalidatePath("/dashboard");
-  return { success: `Request marked as ${status}.` };
+  const result = await scheduleDropoff({
+    pickupId: parsed.data.pickupId,
+    scheduledDate: parsed.data.scheduledDate,
+    timeWindow: parsed.data.timeWindow,
+    notes: parsed.data.notes || null,
+  });
+
+  if (!result.ok) return { error: result.error, values: raw };
+
+  revalidateRequestViews();
+  return { success: "Drop-off scheduled. The customer can see it now." };
 }

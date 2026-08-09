@@ -31,7 +31,7 @@ export default async function SchedulePage() {
       <main className="flex-1 py-8">
         <Container size="md">
           <PageHeader
-            title="Schedule a pickup or drop-off"
+            title="Request a pickup"
             description={
               settings
                 ? `We will collect from or deliver to ${user.address_line1}${
@@ -71,8 +71,9 @@ export default async function SchedulePage() {
           </Card>
 
           <p className="mt-4 text-xs text-fg-subtle">
-            You can hold one open pickup and one open drop-off per day. Requests
-            can be booked up to {MAX_ADVANCE_DAYS} days ahead.
+            One open pickup per day, booked up to {MAX_ADVANCE_DAYS} days ahead.
+            Your return is scheduled by us once the laundry is with us — it
+            will appear on your dashboard.
           </p>
         </Container>
       </main>

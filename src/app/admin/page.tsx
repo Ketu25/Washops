@@ -3,6 +3,7 @@ import {
   ClipboardList,
   Clock3,
   Inbox,
+  PackageOpen,
   Settings2,
   Truck,
 } from "lucide-react";
@@ -22,9 +23,14 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { requireAdmin } from "@/lib/auth";
-import { formatDate, formatDateTime, todayISO } from "@/lib/dates";
+import { addDaysISO, formatDate, formatDateTime, MAX_ADVANCE_DAYS, todayISO } from "@/lib/dates";
 import { formatMiles } from "@/lib/geo";
-import { getDashboardStats, listAdminRequests } from "@/lib/requests";
+import {
+  getDashboardStats,
+  listAdminRequests,
+  listPickupsAwaitingDropoff,
+  type AdminStatusFilter,
+} from "@/lib/requests";
 import { getSettings } from "@/lib/settings";
 import type { RequestStatus, RequestType } from "@/lib/types";
 
@@ -34,7 +40,8 @@ export const metadata = { title: "Admin · Laundry Portal" };
 const STATUSES: RequestStatus[] = ["pending", "planned", "completed", "cancelled"];
 const TYPES: RequestType[] = ["pickup", "dropoff"];
 
-function parseStatus(value?: string): RequestStatus | "all" {
+function parseStatus(value?: string): AdminStatusFilter {
+  if (value === "awaiting_dropoff") return "awaiting_dropoff";
   return STATUSES.includes(value as RequestStatus)
     ? (value as RequestStatus)
     : "all";
@@ -57,13 +64,15 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
     search: typeof params.q === "string" ? params.q : undefined,
   };
 
-  const [stats, requests, settings] = await Promise.all([
+  const [stats, requests, settings, awaitingDropoff] = await Promise.all([
     getDashboardStats(),
     listAdminRequests(filters),
     getSettings(),
+    listPickupsAwaitingDropoff(),
   ]);
 
   const today = todayISO();
+  const maxDate = addDaysISO(today, MAX_ADVANCE_DAYS);
 
   return (
     <>
@@ -99,7 +108,7 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
             </div>
           ) : null}
 
-          <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <StatCard
               label="Pending"
               value={stats.pending}
@@ -113,6 +122,13 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
               hint="On the route"
               icon={Truck}
               tone="brand"
+            />
+            <StatCard
+              label="Awaiting drop-off"
+              value={stats.awaitingDropoff}
+              hint="Collected, not yet booked back"
+              icon={PackageOpen}
+              tone={stats.awaitingDropoff > 0 ? "warning" : "neutral"}
             />
             <StatCard
               label="Today"
@@ -230,6 +246,24 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
                         <RequestStatusActions
                           requestId={request.id}
                           status={request.status}
+                          type={request.type}
+                          dropoff={
+                            request.type === "pickup" &&
+                            request.status === "completed"
+                              ? {
+                                  scheduled: !awaitingDropoff.has(request.id),
+                                  customerName:
+                                    request.users?.full_name ?? "this customer",
+                                  pickupDate: formatDate(request.scheduled_date),
+                                  // Never offer a return before the collection.
+                                  minDate:
+                                    request.scheduled_date > today
+                                      ? request.scheduled_date
+                                      : today,
+                                  maxDate,
+                                }
+                              : undefined
+                          }
                         />
                       </TD>
                     </TR>

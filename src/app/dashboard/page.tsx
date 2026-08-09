@@ -1,4 +1,11 @@
-import { CalendarPlus, Clock, Inbox, MapPin, StickyNote } from "lucide-react";
+import {
+  CalendarPlus,
+  Clock,
+  Inbox,
+  MapPin,
+  PackageOpen,
+  StickyNote,
+} from "lucide-react";
 import Link from "next/link";
 
 import { CancelRequestButton } from "@/components/cancel-request-button";
@@ -8,6 +15,7 @@ import { SiteHeader } from "@/components/layout/site-header";
 import { EmptyState } from "@/components/patterns/empty-state";
 import { StatusBadge, TypeBadge } from "@/components/patterns/request-badges";
 import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Table, TableWrap, TBody, TD, TH, THead, TR } from "@/components/ui/table";
@@ -34,6 +42,18 @@ export default async function CustomerDashboard() {
       CANCELLABLE_STATUSES.includes(request.status) &&
       request.scheduled_date >= today,
   );
+  // Pickups the customer booked and we have already collected, with the
+  // return not yet scheduled. Saying so beats an unexplained gap between
+  // "completed" and a drop-off appearing days later.
+  const awaitingReturn = requests.filter(
+    (request) =>
+      request.type === "pickup" &&
+      request.status === "completed" &&
+      !requests.some(
+        (other) =>
+          other.parent_pickup_id === request.id && other.status !== "cancelled",
+      ),
+  );
   const history = requests.filter((request) => !upcoming.includes(request));
 
   // The owner may have shrunk the radius since this customer registered.
@@ -50,12 +70,12 @@ export default async function CustomerDashboard() {
         <Container size="lg">
           <PageHeader
             title={`Hello, ${user.full_name.split(" ")[0]}`}
-            description="Track your pickups and drop-offs, and cancel anything that has not been completed yet."
+            description="Request a pickup, track it, and see when we are bringing your laundry back."
             actions={
               <Button asChild>
                 <Link href="/dashboard/schedule">
                   <CalendarPlus aria-hidden />
-                  Schedule a request
+                  Request a pickup
                 </Link>
               </Button>
             }
@@ -81,10 +101,10 @@ export default async function CustomerDashboard() {
               <EmptyState
                 icon={Inbox}
                 title="Nothing scheduled"
-                description="Book a pickup or a drop-off and it will appear here."
+                description="Request a pickup and it will appear here. We book the return ourselves once your laundry is with us."
                 action={
                   <Button asChild>
-                    <Link href="/dashboard/schedule">Schedule a request</Link>
+                    <Link href="/dashboard/schedule">Request a pickup</Link>
                   </Button>
                 }
               />
@@ -137,18 +157,30 @@ export default async function CustomerDashboard() {
                                 : "text-fg-subtle"
                             }`}
                           >
-                            {request.status === "planned"
-                              ? "Confirmed — we have you on the route."
-                              : "Awaiting confirmation from the laundromat."}
+                            {request.type === "dropoff"
+                              ? "We are bringing your clean laundry back."
+                              : request.status === "planned"
+                                ? "Confirmed — we have you on the route."
+                                : "Awaiting confirmation from the laundromat."}
                           </p>
                         </div>
 
-                        <CancelRequestButton
-                          requestId={request.id}
-                          label={`${REQUEST_TYPE_LABEL[
-                            request.type
-                          ].toLowerCase()} on ${formatDate(request.scheduled_date)}`}
-                        />
+                        {/*
+                          Only pickups can be cancelled here. A drop-off is
+                          the laundromat returning the customer's property —
+                          withdrawing it is not theirs to do, and the server
+                          rejects it regardless of what the UI shows.
+                        */}
+                        {request.type === "pickup" ? (
+                          <CancelRequestButton
+                            requestId={request.id}
+                            label={`${REQUEST_TYPE_LABEL[
+                              request.type
+                            ].toLowerCase()} on ${formatDate(request.scheduled_date)}`}
+                          />
+                        ) : (
+                          <Badge tone="brand">Arranged by us</Badge>
+                        )}
                       </div>
                     </Card>
                   </li>
@@ -156,6 +188,35 @@ export default async function CustomerDashboard() {
               </ul>
             )}
           </section>
+
+          {awaitingReturn.length > 0 ? (
+            <section className="mb-10">
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-widest text-fg-subtle">
+                With us now
+              </h2>
+              <ul className="flex flex-col gap-3">
+                {awaitingReturn.map((request) => (
+                  <li key={request.id}>
+                    <Card className="flex flex-wrap items-center justify-between gap-4 p-5">
+                      <div className="min-w-0">
+                        <p className="font-medium text-fg">
+                          Collected {formatDate(request.scheduled_date)}
+                        </p>
+                        <p className="mt-0.5 text-sm text-fg-muted">
+                          We will schedule the return and it will appear under
+                          Upcoming.
+                        </p>
+                      </div>
+                      <Badge tone="warning">
+                        <PackageOpen aria-hidden className="size-3" />
+                        Being washed
+                      </Badge>
+                    </Card>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
 
           <section>
             <h2 className="mb-3 text-sm font-semibold uppercase tracking-widest text-fg-subtle">

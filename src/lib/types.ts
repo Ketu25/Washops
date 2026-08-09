@@ -51,6 +51,11 @@ export interface RequestRow extends AddressSnapshot {
   id: string;
   user_id: string;
   type: RequestType;
+  /**
+   * The pickup this drop-off returns. Null on pickups, and on drop-offs
+   * created before the admin took ownership of scheduling them.
+   */
+  parent_pickup_id: string | null;
   status: RequestStatus;
   scheduled_date: string;
   time_window: string;
@@ -79,7 +84,12 @@ export const TIME_WINDOWS = [
 
 export type TimeWindow = (typeof TIME_WINDOWS)[number];
 
-/** Statuses a customer is still allowed to cancel. */
+/**
+ * Statuses a customer is still allowed to cancel.
+ *
+ * Only ever applied to pickups: drop-offs are scheduled by the laundromat,
+ * so cancelling one is the laundromat's call, not the customer's.
+ */
 export const CANCELLABLE_STATUSES: RequestStatus[] = ["pending", "planned"];
 
 /** Statuses that occupy the "one open request per day" slot. */

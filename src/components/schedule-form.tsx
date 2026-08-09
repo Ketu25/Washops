@@ -1,8 +1,8 @@
 "use client";
 
-import { ArrowDownToLine, ArrowUpFromLine, CheckCircle2 } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { useActionState } from "react";
 
 import type { FormState } from "@/app/actions/auth";
 import { createRequestAction } from "@/app/actions/requests";
@@ -11,31 +11,16 @@ import { Field } from "@/components/ui/field";
 import { Input, Textarea } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { SubmitButton } from "@/components/ui/submit-button";
-import { cn } from "@/lib/cn";
-import { TIME_WINDOWS, type RequestType } from "@/lib/types";
+import { TIME_WINDOWS } from "@/lib/types";
 
 const initialState: FormState = {};
 
-const CHOICES: Array<{
-  value: RequestType;
-  title: string;
-  body: string;
-  icon: typeof ArrowUpFromLine;
-}> = [
-  {
-    value: "pickup",
-    title: "Pickup",
-    body: "Collect my laundry",
-    icon: ArrowUpFromLine,
-  },
-  {
-    value: "dropoff",
-    title: "Drop-off",
-    body: "Return my clean laundry",
-    icon: ArrowDownToLine,
-  },
-];
-
+/**
+ * Books a PICKUP. There is no type selector any more: the customer asks us
+ * to collect, and the return is scheduled by the laundromat once the laundry
+ * is actually in the shop. The panel below says so, because otherwise the
+ * absence of a drop-off option reads as a missing feature.
+ */
 export function ScheduleForm({
   minDate,
   maxDate,
@@ -48,15 +33,12 @@ export function ScheduleForm({
   const [state, formAction] = useActionState(createRequestAction, initialState);
   const errors = state.fieldErrors ?? {};
   const values = state.values ?? {};
-  const [type, setType] = useState<RequestType>(
-    (values.type as RequestType) || "pickup",
-  );
 
   return (
     <form action={formAction} className="flex flex-col gap-5">
       {state.error ? <Alert tone="error">{state.error}</Alert> : null}
       {state.success ? (
-        <Alert tone="success" title="Request submitted">
+        <Alert tone="success" title="Pickup submitted">
           <p>{state.success}</p>
           <p className="mt-2">
             <Link href="/dashboard">View your requests</Link>
@@ -65,73 +47,25 @@ export function ScheduleForm({
       ) : null}
 
       <fieldset disabled={disabled} className="flex flex-col gap-5">
-        {/*
-          Two large radio cards rather than a dropdown: there are exactly two
-          choices, it is the most consequential field on the form, and the
-          direction of travel is easier to read as an icon than as words.
-          A visually-hidden native radio keeps it keyboard- and
-          screen-reader-native.
-        */}
-        <fieldset className="flex flex-col gap-2">
-          <legend className="mb-2 text-sm font-medium text-fg">
-            What do you need?
-          </legend>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {CHOICES.map((choice) => {
-              const active = type === choice.value;
-              return (
-                <label
-                  key={choice.value}
-                  className={cn(
-                    "relative flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-all",
-                    "hover:border-line-strong",
-                    active
-                      ? "border-brand bg-brand-soft/50 ring-[3px] ring-brand/15"
-                      : "border-line bg-surface",
-                    "has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-brand/30",
-                  )}
-                >
-                  <input
-                    // Stable ids so tests and labels can target a specific
-                    // choice; the visible card is the label for it.
-                    id={`type-${choice.value}`}
-                    type="radio"
-                    name="type"
-                    value={choice.value}
-                    checked={active}
-                    onChange={() => setType(choice.value)}
-                    className="sr-only"
-                  />
-                  <span
-                    className={cn(
-                      "flex size-9 shrink-0 items-center justify-center rounded-md",
-                      active
-                        ? "bg-brand text-fg-on-brand"
-                        : "bg-surface-sunken text-fg-subtle",
-                    )}
-                  >
-                    <choice.icon aria-hidden className="size-4" />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-sm font-medium text-fg">
-                      {choice.title}
-                    </span>
-                    <span className="block text-xs text-fg-muted">{choice.body}</span>
-                  </span>
-                  {active ? (
-                    <CheckCircle2
-                      aria-hidden
-                      className="absolute right-3 top-3 size-4 text-brand"
-                    />
-                  ) : null}
-                </label>
-              );
-            })}
+        <div className="rounded-lg border border-line bg-surface-sunken/60 p-4">
+          <div className="flex items-start gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-brand text-fg-on-brand">
+              <ArrowUpFromLine aria-hidden className="size-4" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-fg">
+                We&rsquo;ll collect your laundry
+              </p>
+              <p className="mt-0.5 flex items-start gap-1.5 text-xs text-fg-muted">
+                <ArrowDownToLine aria-hidden className="mt-0.5 size-3 shrink-0" />
+                <span>
+                  Once it&rsquo;s washed we book the return and it appears on
+                  your dashboard — you don&rsquo;t need to schedule that.
+                </span>
+              </p>
+            </div>
           </div>
-          {errors.type ? (
-            <p className="text-xs font-medium text-danger-fg">{errors.type}</p>
-          ) : null}
-        </fieldset>
+        </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Date" htmlFor="scheduledDate" error={errors.scheduledDate} required>
@@ -181,7 +115,7 @@ export function ScheduleForm({
         </Field>
 
         <SubmitButton size="lg" className="sm:self-start" pendingLabel="Submitting…">
-          Submit request
+          Request pickup
         </SubmitButton>
       </fieldset>
     </form>

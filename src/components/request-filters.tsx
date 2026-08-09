@@ -59,7 +59,7 @@ export function RequestFilters({ today }: { today: string }) {
         </div>
       </div>
 
-      <div className="flex w-40 flex-col gap-1.5">
+      <div className="flex w-48 flex-col gap-1.5">
         <Label htmlFor="filter-status">Status</Label>
         <Select
           id="filter-status"
@@ -67,6 +67,7 @@ export function RequestFilters({ today }: { today: string }) {
           onChange={(event) => apply("status", event.target.value)}
         >
           <option value="all">All statuses</option>
+          <option value="awaiting_dropoff">Awaiting drop-off</option>
           <option value="pending">Pending</option>
           <option value="planned">Planned</option>
           <option value="completed">Completed</option>

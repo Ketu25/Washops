@@ -66,6 +66,56 @@ const FAR_EMAIL = `e2e-far-${stamp}@example.test`;
 const PASSWORD = "e2e-password-123";
 
 const browser = await chromium.launch();
+
+/**
+ * The settings row is a singleton the owner actually relies on. These scripts
+ * point it at a test location, so snapshot it first and put it back in the
+ * finally block — otherwise running the suite silently reconfigures a live
+ * laundromat's service area.
+ */
+let settingsSnapshot = null;
+async function snapshotSettings() {
+  const { data } = await db
+    .from("laundromat_settings")
+    .select("*")
+    .eq("id", true)
+    .maybeSingle();
+  settingsSnapshot = data ?? null;
+}
+async function restoreSettings() {
+  if (settingsSnapshot) {
+    await db.from("laundromat_settings").upsert(settingsSnapshot, { onConflict: "id" });
+  } else {
+    await db.from("laundromat_settings").delete().eq("id", true);
+  }
+
+  // Putting the row back is not enough. Moving the shop recomputes every
+  // customer's distance_miles (updateSettingsAction does this deliberately),
+  // so restoring the address without recomputing leaves every customer
+  // measured against the TEST location — which then shows up as a nonsense
+  // distance in the admin queue and can wrongly mark people out of range.
+  if (!settingsSnapshot) return;
+  const { data: customers } = await db
+    .from("users")
+    .select("id, latitude, longitude")
+    .eq("role", "customer")
+    .not("latitude", "is", null);
+
+  const R = 3958.7613;
+  const rad = (d) => (d * Math.PI) / 180;
+  for (const c of customers ?? []) {
+    const dLat = rad(c.latitude - settingsSnapshot.latitude);
+    const dLon = rad(c.longitude - settingsSnapshot.longitude);
+    const h =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(rad(settingsSnapshot.latitude)) *
+        Math.cos(rad(c.latitude)) *
+        Math.sin(dLon / 2) ** 2;
+    const miles = R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+    await db.from("users").update({ distance_miles: miles }).eq("id", c.id);
+  }
+}
+
 /** Pages registered here get dumped if the run aborts. */
 const diagnosticPages = {};
 
@@ -119,6 +169,7 @@ async function fillAddress(page, address) {
 try {
   // -------------------------------------------------------------------
   section("Admin configures the service area");
+  await snapshotSettings();
   await clearSettings();
   await createThrowawayAdmin();
   const admin = await browser.newContext();
@@ -236,15 +287,19 @@ try {
   );
 
   await custPage.goto(`${BASE}/dashboard/schedule`);
-  // Request type is a pair of radio cards; click the card, not a <select>.
-  await custPage.click('label:has(#type-pickup)');
   await custPage.selectOption("#timeWindow", "10:00 - 12:00");
-  await clickButton(custPage, "Submit request");
-  await custPage.waitForSelector("text=Request submitted", { timeout: 30000 });
+  await clickButton(custPage, "Request pickup");
+  await custPage.waitForSelector("text=Pickup submitted", { timeout: 30000 });
   check("a pickup request is submitted", true);
 
-  // Same day, same type, again — the partial unique index should stop it.
-  await clickButton(custPage, "Submit request");
+  check(
+    "the form offers no way to book a drop-off",
+    (await custPage.locator("#type-dropoff").count()) === 0 &&
+      (await custPage.textContent("body")).includes("we book the return"),
+  );
+
+  // Same day again — the partial unique index should stop it.
+  await clickButton(custPage, "Request pickup");
   await custPage.waitForSelector("text=already have an open pickup", {
     timeout: 30000,
   });
@@ -310,25 +365,88 @@ try {
   await custPage.reload({ waitUntil: "networkidle" });
   const custBody = await custPage.textContent("body");
   check(
-    "a completed request moves to history with no cancel button",
-    custBody.includes("History") && custBody.includes("Nothing scheduled"),
+    "a completed pickup shows as with the laundromat, awaiting its return",
+    custBody.includes("With us now") && custBody.includes("Being washed"),
+  );
+
+  // -------------------------------------------------------------------
+  section("Admin schedules the return");
+  await adminPage.goto(`${mine}&status=awaiting_dropoff`);
+  check(
+    "the completed pickup appears under Awaiting drop-off",
+    (await adminPage.textContent("body")).includes("Near Customer"),
+  );
+
+  await clickButton(adminPage, "Schedule drop-off");
+  await adminPage.waitForSelector('[role="dialog"]', { timeout: 15000 });
+  const dropoffDate = await adminPage
+    .locator('[role="dialog"] input[type="date"]')
+    .inputValue();
+  await adminPage
+    .locator('[role="dialog"] select')
+    .selectOption("14:00 - 16:00");
+  await adminPage
+    .locator('[role="dialog"] textarea')
+    .fill("Two bags, folded.");
+  await adminPage
+    .locator('[role="dialog"] button[type="submit"]')
+    .click();
+  // Booking it removes the pickup from THIS filtered view, which is what
+  // closes the dialog. So assert on the unfiltered queue.
+  await adminPage.waitForSelector('[role="dialog"]', {
+    state: "detached",
+    timeout: 30000,
+  });
+  check(
+    "the pickup drops out of Awaiting drop-off once booked",
+    (await adminPage.textContent("body")).includes(
+      "No requests match these filters",
+    ),
+  );
+
+  await adminPage.goto(mine);
+  const queueAfter = await adminPage.textContent("body");
+  check(
+    "the pickup now reads as booked, and the return is in the queue",
+    queueAfter.includes("Drop-off booked") && queueAfter.includes("Drop-off"),
+  );
+
+  await custPage.goto(`${BASE}/dashboard`);
+  await custPage.reload({ waitUntil: "networkidle" });
+  const afterDropoff = await custPage.textContent("body");
+  check(
+    "the customer sees the drop-off the laundromat scheduled",
+    afterDropoff.includes("Drop-off") &&
+      afterDropoff.includes("bringing your clean laundry back") &&
+      afterDropoff.includes("14:00 - 16:00"),
+  );
+  check(
+    "the customer cannot cancel a drop-off",
+    afterDropoff.includes("Arranged by us") &&
+      (await custPage.getByRole("button", { name: "Cancel", exact: true }).count()) === 0,
+    `dropoffDate=${dropoffDate}`,
   );
 
   // -------------------------------------------------------------------
   section("Cancellation");
+  // Today's pickup is already completed, so book a different day.
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
   await custPage.goto(`${BASE}/dashboard/schedule`);
-  await custPage.click('label:has(#type-dropoff)');
-  await clickButton(custPage, "Submit request");
-  await custPage.waitForSelector("text=Request submitted", { timeout: 30000 });
+  await custPage.fill("#scheduledDate", tomorrow);
+  await clickButton(custPage, "Request pickup");
+  await custPage.waitForSelector("text=Pickup submitted", { timeout: 30000 });
 
   await custPage.goto(`${BASE}/dashboard`);
-  // Cancelling now opens an in-app confirmation dialog rather than
+  // Cancelling opens an in-app confirmation dialog rather than
   // window.confirm, so the flow is: open it, then confirm.
   await clickButton(custPage, "Cancel");
   await custPage.waitForSelector('[role="dialog"]', { timeout: 15000 });
   await clickButton(custPage, "Cancel request");
-  await custPage.waitForSelector("text=Nothing scheduled", { timeout: 30000 });
-  check("a customer can cancel an open request", true);
+  await custPage.waitForFunction(
+    () => !document.body.innerText.includes("Awaiting confirmation"),
+    { timeout: 30000 },
+  );
+  check("a customer can cancel their own pickup", true);
 
   // -------------------------------------------------------------------
   section("Shrinking the radius locks out an existing customer");
@@ -350,7 +468,7 @@ try {
   );
 
   await custPage.goto(`${BASE}/dashboard/schedule`);
-  const disabled = await custPage.isDisabled("#type-pickup");
+  const disabled = await custPage.isDisabled("#scheduledDate");
   check("the scheduling form is disabled for them", disabled);
 
   // -------------------------------------------------------------------
@@ -380,6 +498,7 @@ try {
 } finally {
   await browser.close();
   await cleanup();
+  await restoreSettings();
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -59,10 +59,19 @@ export const dateStringSchema = z
     );
   }, "Choose a valid date.");
 
+/**
+ * Customers only ever book pickups now. `type` is not accepted from the
+ * client at all, so a crafted form post cannot create a drop-off.
+ */
 export const createRequestSchema = z.object({
-  type: z.enum(["pickup", "dropoff"], {
-    message: "Choose pickup or drop-off.",
-  }),
+  scheduledDate: dateStringSchema,
+  timeWindow: z.enum(TIME_WINDOWS, { message: "Choose a time window." }),
+  notes: trimmed(500).optional().or(z.literal("")),
+});
+
+/** Admin scheduling the return of a completed pickup. */
+export const scheduleDropoffSchema = z.object({
+  pickupId: z.string().uuid("Missing or invalid pickup reference."),
   scheduledDate: dateStringSchema,
   timeWindow: z.enum(TIME_WINDOWS, { message: "Choose a time window." }),
   notes: trimmed(500).optional().or(z.literal("")),

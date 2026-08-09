@@ -74,6 +74,11 @@ create table if not exists public.requests (
   user_id           uuid not null references public.users(id) on delete cascade,
 
   type              text not null check (type in ('pickup', 'dropoff')),
+
+  -- A drop-off returns exactly one pickup. Customers book pickups; the
+  -- admin schedules the return once the pickup is completed. Null on
+  -- pickups, and on drop-offs predating that change.
+  parent_pickup_id  uuid references public.requests(id) on delete cascade,
   status            text not null default 'pending'
                       check (status in ('pending', 'planned', 'completed', 'cancelled')),
 
@@ -97,7 +102,10 @@ create table if not exists public.requests (
   completed_at      timestamptz,
   cancelled_at      timestamptz,
   created_at        timestamptz not null default now(),
-  updated_at        timestamptz not null default now()
+  updated_at        timestamptz not null default now(),
+
+  constraint requests_only_dropoffs_have_parent
+    check (parent_pickup_id is null or type = 'dropoff')
 );
 
 create index if not exists requests_user_id_idx        on public.requests (user_id);
@@ -106,13 +114,29 @@ create index if not exists requests_scheduled_date_idx on public.requests (sched
 create index if not exists requests_type_idx           on public.requests (type);
 create index if not exists requests_dashboard_idx      on public.requests (status, scheduled_date desc);
 
--- One OPEN request per customer per day per type. A cancelled or
--- completed request does not occupy the slot, so the customer can
--- re-book the same day after cancelling. Enforced in the database so a
--- double-submit or a race between two tabs cannot slip through.
-create unique index if not exists requests_one_open_per_day_per_type
-  on public.requests (user_id, type, scheduled_date)
-  where status in ('pending', 'planned');
+-- One OPEN pickup per customer per day. A cancelled or completed pickup
+-- does not occupy the slot, so the customer can re-book the same day
+-- after cancelling. Enforced in the database so a double-submit or a race
+-- between two tabs cannot slip through.
+--
+-- Deliberately pickups only: the admin owns drop-offs now, and two
+-- pickups completed in the same week may legitimately be returned on the
+-- same day.
+create unique index if not exists requests_one_open_pickup_per_day
+  on public.requests (user_id, scheduled_date)
+  where type = 'pickup' and status in ('pending', 'planned');
+
+-- One live drop-off per pickup. 'cancelled' is excluded so cancelling a
+-- return frees the pickup to have another scheduled; 'completed' is
+-- included so a finished return cannot be duplicated.
+create unique index if not exists requests_one_dropoff_per_pickup
+  on public.requests (parent_pickup_id)
+  where parent_pickup_id is not null
+    and status in ('pending', 'planned', 'completed');
+
+create index if not exists requests_parent_pickup_id_idx
+  on public.requests (parent_pickup_id)
+  where parent_pickup_id is not null;
 
 -- ---------------------------------------------------------------------
 -- updated_at maintenance

@@ -14,7 +14,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { canTransition } from "@/lib/transitions";
-import type { RequestStatus } from "@/lib/types";
+import type { RequestStatus, RequestType } from "@/lib/types";
+import { ScheduleDropoffDialog } from "./schedule-dropoff-dialog";
 
 const initialState: FormState = {};
 
@@ -33,9 +34,23 @@ const initialState: FormState = {};
 export function RequestStatusActions({
   requestId,
   status,
+  type,
+  dropoff,
 }: {
   requestId: string;
   status: RequestStatus;
+  type: RequestType;
+  /**
+   * Present only on completed pickups: everything the return dialog needs,
+   * plus whether one is already booked.
+   */
+  dropoff?: {
+    scheduled: boolean;
+    customerName: string;
+    pickupDate: string;
+    minDate: string;
+    maxDate: string;
+  };
 }) {
   const [state, formAction] = useActionState(
     updateRequestStatusAction,
@@ -47,6 +62,23 @@ export function RequestStatusActions({
   const canPlan = canTransition(status, "planned");
   const canComplete = canTransition(status, "completed");
   const canCancel = canTransition(status, "cancelled");
+
+  // A completed pickup is terminal as a *request*, but it is the point at
+  // which the return becomes schedulable — so this is the one terminal state
+  // that still has an action.
+  if (type === "pickup" && status === "completed" && dropoff) {
+    return dropoff.scheduled ? (
+      <span className="text-xs text-fg-subtle">Drop-off booked</span>
+    ) : (
+      <ScheduleDropoffDialog
+        pickupId={requestId}
+        customerName={dropoff.customerName}
+        pickupDate={dropoff.pickupDate}
+        minDate={dropoff.minDate}
+        maxDate={dropoff.maxDate}
+      />
+    );
+  }
 
   if (!canPlan && !canComplete && !canCancel) {
     return <span className="text-xs text-fg-subtle">—</span>;
